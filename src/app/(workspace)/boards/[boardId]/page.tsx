@@ -7,12 +7,9 @@ import {
 import { notFound } from "next/navigation";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
-import {
-  type BoardCard,
-  formatShortDate,
-  getBoard,
-  getFolder,
-} from "@/lib/kitchen-data";
+import { getBoard, getFolder } from "@/lib/kitchen-data";
+import { formatShortDate } from "@/lib/kitchen-format";
+import type { BoardCard } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
 /** Column accents. Blocked reads red, Done green, the rest stay neutral. */
@@ -36,10 +33,10 @@ export default async function BoardPage({
   params: Promise<{ boardId: string }>;
 }) {
   const { boardId } = await params;
-  const board = getBoard(boardId);
+  const board = await getBoard(boardId);
   if (!board) notFound();
 
-  const folder = getFolder(board.folderId);
+  const folder = await getFolder(board.folderId);
   const people = [
     ...new Set(
       board.columns.flatMap((c) =>

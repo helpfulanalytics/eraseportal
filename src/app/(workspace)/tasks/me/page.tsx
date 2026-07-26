@@ -1,11 +1,7 @@
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { PageTitleTabs } from "@/components/kitchen/page-title";
-import {
-  CURRENT_USER_ID,
-  formatShortDate,
-  getFolder,
-  TASKS,
-} from "@/lib/kitchen-data";
+import { getCurrentUser, getFolders, getTasks } from "@/lib/kitchen-data";
+import { formatShortDate } from "@/lib/kitchen-format";
 
 const STATUS_LABEL: Record<string, string> = {
   todo: "To do",
@@ -19,9 +15,15 @@ const STATUS_TINT: Record<string, string> = {
   done: "bg-k-green-23 text-k-green-0e",
 };
 
-export default function MyTasksPage() {
-  const mine = TASKS.filter(
-    (t) => t.assigneeId === CURRENT_USER_ID && !t.completed,
+export default async function MyTasksPage() {
+  const [allTasks, folders, me] = await Promise.all([
+    getTasks(),
+    getFolders(),
+    getCurrentUser(),
+  ]);
+  const folderName = new Map(folders.map((f) => [f.id, f.name]));
+  const mine = allTasks.filter(
+    (t) => t.assigneeId === me?.id && !t.completed,
   ).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? ""));
 
   const rows: Row[] = mine.map((task) => ({
@@ -38,7 +40,7 @@ export default function MyTasksPage() {
           {STATUS_LABEL[task.status] ?? task.status}
         </span>
       ),
-      folder: task.folderId ? (getFolder(task.folderId)?.name ?? "—") : "—",
+      folder: task.folderId ? (folderName.get(task.folderId) ?? "—") : "—",
       due: task.dueDate ? formatShortDate(task.dueDate) : "—",
     },
   }));

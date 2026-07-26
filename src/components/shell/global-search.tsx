@@ -2,7 +2,7 @@
 
 import { SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { WORKSPACE } from "@/lib/kitchen-data";
+import { useWorkspace } from "@/components/workspace-provider";
 
 /**
  * The search pill in the top bar plus its ⌘K overlay. The overlay is chrome
@@ -11,6 +11,7 @@ import { WORKSPACE } from "@/lib/kitchen-data";
  */
 export function GlobalSearch() {
   const [open, setOpen] = useState(false);
+  const workspace = useWorkspace();
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -24,7 +25,7 @@ export function GlobalSearch() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const placeholder = `Search ${WORKSPACE.name}...`;
+  const placeholder = `Search ${workspace.name}...`;
 
   return (
     <>

@@ -1,6 +1,6 @@
 import { PageTitleTabs, SubTabs } from "@/components/kitchen/page-title";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
-import { PEOPLE, WORKSPACE } from "@/lib/kitchen-data";
+import { getPeople, getWorkspace } from "@/lib/kitchen-data";
 
 const TABS = ["general", "members", "billing"] as const;
 type Tab = (typeof TABS)[number];
@@ -37,12 +37,14 @@ export default async function SettingsPage({
   );
 }
 
-function General() {
+async function General() {
+  const workspace = await getWorkspace();
+
   return (
     <div className="flex flex-col gap-6">
       <Field label="Workspace name" hint="Shown in the sidebar and on shared links.">
         <input
-          defaultValue={WORKSPACE.name}
+          defaultValue={workspace.name}
           className="h-8 w-full rounded-lg border border-k-black-08 px-3 text-k-black-84 text-md outline-none focus:border-k-blue"
         />
       </Field>
@@ -80,10 +82,12 @@ function General() {
   );
 }
 
-function Members() {
+async function Members() {
+  const people = await getPeople();
+
   return (
     <ul className="flex flex-col">
-      {Object.values(PEOPLE).map((person) => (
+      {Object.values(people).map((person) => (
         <li
           key={person.id}
           className="flex items-center gap-3 border-k-black-06 border-b py-3"

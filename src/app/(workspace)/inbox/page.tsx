@@ -7,7 +7,8 @@ import {
 import Link from "next/link";
 import { SubTabs } from "@/components/kitchen/page-title";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
-import { formatShortDate, getPerson, INBOX } from "@/lib/kitchen-data";
+import { getInbox, getPeople } from "@/lib/kitchen-data";
+import { formatShortDate } from "@/lib/kitchen-format";
 import { cn } from "@/lib/utils";
 
 const TABS = ["chats", "tasks", "files", "updates"] as const;
@@ -20,7 +21,8 @@ export default async function InboxPage({
 }) {
   const { tab } = await searchParams;
   const active: Tab = TABS.includes(tab as Tab) ? (tab as Tab) : "chats";
-  const entries = INBOX.filter((e) =>
+  const [allEntries, people] = await Promise.all([getInbox(), getPeople()]);
+  const entries = allEntries.filter((e) =>
     active === "chats" ? e.kind === "chat" : e.kind === active.slice(0, -1),
   );
 
@@ -63,7 +65,7 @@ export default async function InboxPage({
             </li>
           ) : (
             entries.map((entry) => {
-              const author = getPerson(entry.authorId);
+              const author = people[entry.authorId];
               return (
                 <li key={entry.id}>
                   <Link

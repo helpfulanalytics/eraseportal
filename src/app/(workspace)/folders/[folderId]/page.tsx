@@ -17,14 +17,9 @@ import { notFound } from "next/navigation";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { FileThumb } from "@/components/kitchen/file-thumb";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
-import {
-  formatBytes,
-  formatShortDate,
-  getFolder,
-  getFolderItems,
-  type ItemMeta,
-  itemHref,
-} from "@/lib/kitchen-data";
+import { getFolder, getFolderItems } from "@/lib/kitchen-data";
+import { formatBytes, formatShortDate, itemHref } from "@/lib/kitchen-format";
+import type { ItemMeta } from "@/lib/kitchen-types";
 
 /** Grey metadata line under an item name, by kind. */
 function itemSubtitle(meta: ItemMeta): string | null {
@@ -51,10 +46,10 @@ export default async function FolderPage({
   params: Promise<{ folderId: string }>;
 }) {
   const { folderId } = await params;
-  const folder = getFolder(folderId);
+  const folder = await getFolder(folderId);
   if (!folder) notFound();
 
-  const items = getFolderItems(folderId);
+  const items = await getFolderItems(folderId);
   const participants = [
     ...new Set(items.map((i) => i.authorId)),
   ];

@@ -5,7 +5,8 @@ import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { GlobalSearch } from "@/components/shell/global-search";
 import { IconRail } from "@/components/shell/icon-rail";
 import { Sidebar } from "@/components/shell/sidebar";
-import { CURRENT_USER_ID } from "@/lib/kitchen-data";
+import { useCurrentUser } from "@/components/workspace-provider";
+import type { NavFolder } from "@/lib/kitchen-types";
 
 const SIDEBAR_KEY = "workspace:sidebar-open";
 
@@ -42,12 +43,19 @@ function toggleSidebar() {
  * Shell geometry: fixed icon rail, collapsible sidebar, and a white card
  * floating inset on the grey page. See docs/kitchen-scan.md §2.
  */
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  navFolders,
+}: {
+  children: React.ReactNode;
+  navFolders: NavFolder[];
+}) {
   const sidebarOpen = useSyncExternalStore(
     subscribeSidebar,
     readSidebar,
     () => true,
   );
+  const currentUser = useCurrentUser();
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-k-page">
@@ -56,7 +64,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <GlobalSearch />
         </div>
         <div className="ml-auto">
-          <PersonAvatar personId={CURRENT_USER_ID} className="size-7" />
+          {currentUser ? (
+            <PersonAvatar personId={currentUser.id} className="size-7" />
+          ) : null}
         </div>
       </header>
 
@@ -64,7 +74,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <IconRail onToggleSidebar={toggleSidebar} sidebarOpen={sidebarOpen} />
 
         <div className="mr-[var(--k-card-inset)] flex min-w-0 flex-1 overflow-hidden rounded-2xl bg-background shadow-[0_0_0_0.5px_var(--k-black-08)]">
-          {sidebarOpen ? <Sidebar /> : null}
+          {sidebarOpen ? <Sidebar folders={navFolders} /> : null}
           <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>

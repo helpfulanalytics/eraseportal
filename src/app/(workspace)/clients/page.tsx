@@ -2,7 +2,8 @@ import { Building2Icon, PlusIcon, SearchIcon, UsersIcon, Columns3Icon, ChevronDo
 import { DataTable, type Column, type Row } from "@/components/kitchen/data-table";
 import { PageTitleTabs } from "@/components/kitchen/page-title";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
-import { COMPANIES, formatShortDate, getClients } from "@/lib/kitchen-data";
+import { getClients, getCompanies } from "@/lib/kitchen-data";
+import { formatShortDate } from "@/lib/kitchen-format";
 
 export default async function ClientsPage({
   searchParams,
@@ -11,8 +12,8 @@ export default async function ClientsPage({
 }) {
   const { tab } = await searchParams;
   const showCompanies = tab === "companies";
-  const clients = getClients();
-  const count = showCompanies ? COMPANIES.length : clients.length;
+  const [clients, companies] = await Promise.all([getClients(), getCompanies()]);
+  const count = showCompanies ? companies.length : clients.length;
 
   const columns: Column[] = showCompanies
     ? [
@@ -28,7 +29,7 @@ export default async function ClientsPage({
       ];
 
   const rows: Row[] = showCompanies
-    ? COMPANIES.map((company) => ({
+    ? companies.map((company) => ({
         id: company.id,
         cells: {
           name: (

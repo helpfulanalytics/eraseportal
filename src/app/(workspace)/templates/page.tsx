@@ -6,7 +6,7 @@ import {
   MessageSquareIcon,
 } from "lucide-react";
 import { PageTitleTabs } from "@/components/kitchen/page-title";
-import { TEMPLATES } from "@/lib/kitchen-data";
+import { getTemplates } from "@/lib/kitchen-data";
 
 const CONTENT_ICON: Record<string, React.ElementType> = {
   Conversation: MessageSquareIcon,
@@ -16,7 +16,9 @@ const CONTENT_ICON: Record<string, React.ElementType> = {
   Files: FolderIcon,
 };
 
-export default function TemplatesPage() {
+export default async function TemplatesPage() {
+  const templates = await getTemplates();
+
   return (
     <div className="px-12 py-10">
       <PageTitleTabs
@@ -28,7 +30,7 @@ export default function TemplatesPage() {
       </p>
 
       <ul className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-        {TEMPLATES.map((template) => (
+        {templates.map((template) => (
           <li key={template.id}>
             <button
               type="button"

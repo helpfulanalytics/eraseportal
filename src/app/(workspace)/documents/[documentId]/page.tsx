@@ -3,12 +3,8 @@ import { notFound } from "next/navigation";
 import { RichText } from "@/components/conversation/rich-text";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
-import {
-  formatShortDate,
-  getDocument,
-  getFolder,
-  getPerson,
-} from "@/lib/kitchen-data";
+import { getDocument, getFolder, getPerson } from "@/lib/kitchen-data";
+import { formatShortDate } from "@/lib/kitchen-format";
 
 export default async function DocumentPage({
   params,
@@ -16,11 +12,11 @@ export default async function DocumentPage({
   params: Promise<{ documentId: string }>;
 }) {
   const { documentId } = await params;
-  const doc = getDocument(documentId);
+  const doc = await getDocument(documentId);
   if (!doc) notFound();
 
-  const folder = getFolder(doc.folderId);
-  const author = getPerson(doc.authorId);
+  const folder = await getFolder(doc.folderId);
+  const author = await getPerson(doc.authorId);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

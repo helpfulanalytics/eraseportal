@@ -9,10 +9,10 @@ export default async function EmbedPage({
   params: Promise<{ embedId: string }>;
 }) {
   const { embedId } = await params;
-  const embed = getEmbed(embedId);
+  const embed = await getEmbed(embedId);
   if (!embed) notFound();
 
-  const folder = getFolder(embed.folderId);
+  const folder = await getFolder(embed.folderId);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

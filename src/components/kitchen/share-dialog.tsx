@@ -3,7 +3,7 @@
 import { CheckIcon, GlobeIcon, LinkIcon, LockIcon, ShareIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
-import { getPerson, PEOPLE } from "@/lib/kitchen-data";
+import { usePeople } from "@/components/workspace-provider";
 import { cn } from "@/lib/utils";
 
 type Access = "invited" | "link";
@@ -14,6 +14,7 @@ type Access = "invited" | "link";
  * the access toggle and role selects hold local state only.
  */
 export function ShareDialog({ title }: { title: string }) {
+  const people = usePeople();
   const [open, setOpen] = useState(false);
   const [access, setAccess] = useState<Access>("invited");
   const [copied, setCopied] = useState(false);
@@ -100,7 +101,7 @@ export function ShareDialog({ title }: { title: string }) {
             <div className="mt-4">
               <div className="mb-2 text-k-black-40 text-md">People</div>
               <ul className="flex flex-col">
-                {Object.values(PEOPLE).map((person) => (
+                {Object.values(people).map((person) => (
                   <li
                     key={person.id}
                     className="flex items-center gap-2.5 py-2"
@@ -108,7 +109,7 @@ export function ShareDialog({ title }: { title: string }) {
                     <PersonAvatar personId={person.id} className="size-7" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-k-black-84 text-md">
-                        {getPerson(person.id)?.name}
+                        {person.name}
                       </div>
                       <div className="truncate text-k-black-40 text-md">
                         {person.email}

@@ -2,15 +2,11 @@ import { Columns3Icon, SearchIcon, UploadIcon } from "lucide-react";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { PageTitleTabs } from "@/components/kitchen/page-title";
 import { FileThumb } from "@/components/kitchen/file-thumb";
-import {
-  formatBytes,
-  formatShortDate,
-  getLibraryFiles,
-  getPerson,
-} from "@/lib/kitchen-data";
+import { getLibraryFiles, getPeople } from "@/lib/kitchen-data";
+import { formatBytes, formatShortDate } from "@/lib/kitchen-format";
 
-export default function LibraryPage() {
-  const files = getLibraryFiles();
+export default async function LibraryPage() {
+  const [files, people] = await Promise.all([getLibraryFiles(), getPeople()]);
 
   const rows: Row[] = files.map((file) => ({
     id: `${file.source}-${file.id}`,
@@ -27,7 +23,7 @@ export default function LibraryPage() {
         </div>
       ),
       source: <span className="truncate">{file.source}</span>,
-      author: getPerson(file.authorId)?.name ?? "—",
+      author: people[file.authorId]?.name ?? "—",
       created: formatShortDate(file.createdAt),
     },
   }));

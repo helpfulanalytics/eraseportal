@@ -8,7 +8,8 @@ import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { PageTitleTabs, SubTabs } from "@/components/kitchen/page-title";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { TaskCalendar } from "@/components/kitchen/task-calendar";
-import { formatShortDate, getPerson, TASKS } from "@/lib/kitchen-data";
+import { getPeople, getTasks } from "@/lib/kitchen-data";
+import { formatShortDate } from "@/lib/kitchen-format";
 
 const STATUS_LABEL: Record<string, string> = {
   todo: "To do",
@@ -37,7 +38,8 @@ export default async function TasksPage({
   const layout = sp.layout === "calendar" ? "calendar" : "table";
   const order = sp.order ?? "due_date";
 
-  const tasks = TASKS.filter((t) =>
+  const [allTasks, people] = await Promise.all([getTasks(), getPeople()]);
+  const tasks = allTasks.filter((t) =>
     view === "completed" ? t.completed : !t.completed,
   );
 
@@ -69,7 +71,7 @@ export default async function TasksPage({
       assignee: task.assigneeId ? (
         <span className="flex items-center gap-2">
           <PersonAvatar personId={task.assigneeId} className="size-5" />
-          <span className="truncate">{getPerson(task.assigneeId)?.name}</span>
+          <span className="truncate">{people[task.assigneeId ?? ""]?.name}</span>
         </span>
       ) : (
         "—"

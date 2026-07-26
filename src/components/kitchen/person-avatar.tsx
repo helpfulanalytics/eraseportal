@@ -1,10 +1,17 @@
+"use client";
+
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { getPerson } from "@/lib/kitchen-data";
+import { usePerson } from "@/components/workspace-provider";
 import { cn } from "@/lib/utils";
 
 /**
- * Avatar for a person id. Falls back to tinted initials — the mock dataset has
- * no image URLs, and initials read better than a generic silhouette.
+ * Avatar for a person id. Falls back to tinted initials — there are no image
+ * URLs in the dataset, and initials read better than a generic silhouette.
+ *
+ * A client component reading the directory from context rather than a server
+ * component awaiting `getPerson`, because it renders on both sides of the
+ * boundary: page headers and tables on the server, message lists and the share
+ * dialog on the client. Context is the only form that works from both.
  */
 export function PersonAvatar({
   personId,
@@ -13,7 +20,7 @@ export function PersonAvatar({
   personId: string;
   className?: string;
 }) {
-  const person = getPerson(personId);
+  const person = usePerson(personId);
   if (!person) return null;
 
   return (

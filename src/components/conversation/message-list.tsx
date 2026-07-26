@@ -4,13 +4,9 @@ import { MoreHorizontalIcon, ReplyIcon, SmilePlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { RichText } from "@/components/conversation/rich-text";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
-import {
-  CURRENT_USER_ID,
-  formatBytes,
-  formatShortDate,
-  getPerson,
-  type Message,
-} from "@/lib/kitchen-data";
+import { useCurrentUser, usePerson } from "@/components/workspace-provider";
+import { formatBytes, formatShortDate } from "@/lib/kitchen-format";
+import type { Message } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -67,8 +63,9 @@ function MessageRow({
   message: Message;
   focused: boolean;
 }) {
-  const author = getPerson(message.authorId);
-  const isOwn = message.authorId === CURRENT_USER_ID;
+  const author = usePerson(message.authorId);
+  const currentUser = useCurrentUser();
+  const isOwn = message.authorId === currentUser?.id;
 
   return (
     <li id={message.id} className="group/msg scroll-mt-6">

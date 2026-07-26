@@ -1,5 +1,7 @@
-import type { Block, Inline } from "@/lib/kitchen-data";
-import { getPerson } from "@/lib/kitchen-data";
+"use client";
+
+import { usePeople } from "@/components/workspace-provider";
+import type { Block, Inline } from "@/lib/kitchen-types";
 
 /** Renders a structured message body. See the Block/Inline types in kitchen-data. */
 export function RichText({ blocks }: { blocks: Block[] }) {
@@ -47,13 +49,15 @@ export function RichText({ blocks }: { blocks: Block[] }) {
 }
 
 function InlineRun({ nodes }: { nodes: Inline[] }) {
+  const people = usePeople();
+
   return (
     <>
       {nodes.map((node, i) => {
         const key = `${node.t}-${i}`;
 
         if (node.t === "mention") {
-          const person = getPerson(node.personId);
+          const person = people[node.personId];
           return (
             <span
               key={key}

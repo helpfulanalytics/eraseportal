@@ -1,4 +1,8 @@
-import { formatShortDate, getPerson, type Task } from "@/lib/kitchen-data";
+"use client";
+
+import { usePeople } from "@/components/workspace-provider";
+import { formatShortDate } from "@/lib/kitchen-format";
+import type { Task } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -15,6 +19,7 @@ const STATUS_TINT: Record<string, string> = {
  * sits in a different month.
  */
 export function TaskCalendar({ tasks }: { tasks: Task[] }) {
+  const people = usePeople();
   const dated = tasks.filter((t) => t.dueDate);
 
   if (dated.length === 0) {
@@ -104,7 +109,7 @@ export function TaskCalendar({ tasks }: { tasks: Task[] }) {
                           )}
                           title={`${task.title}${
                             task.assigneeId
-                              ? ` — ${getPerson(task.assigneeId)?.name}`
+                              ? ` — ${people[task.assigneeId]?.name}`
                               : ""
                           } (${formatShortDate(task.dueDate as string)})`}
                         >

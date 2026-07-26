@@ -10,11 +10,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  FOLDERS,
-  getConversationsInFolder,
-  WORKSPACE,
-} from "@/lib/kitchen-data";
+import { useWorkspace } from "@/components/workspace-provider";
+import type { NavFolder } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
 function HomeGlyph({ className }: { className?: string }) {
@@ -41,14 +38,15 @@ const LINKS = [
   { href: "/library", icon: ArchiveIcon, label: "Library" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ folders }: { folders: NavFolder[] }) {
   const pathname = usePathname();
+  const workspace = useWorkspace();
 
   return (
     <div className="flex h-full w-sidebar shrink-0 flex-col overflow-y-auto border-k-black-06 border-r bg-background">
       <div className="flex items-center gap-1 px-4 pt-4 pb-3">
         <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
-          {WORKSPACE.name}
+          {workspace.name}
         </h2>
         <button
           type="button"
@@ -85,9 +83,9 @@ export function Sidebar() {
       <div className="px-4 pt-5 pb-1.5 text-k-black-40 text-sm">Folders</div>
 
       <ul className="flex flex-col gap-px px-2 pb-4">
-        {FOLDERS.map((folder) => {
+        {folders.map((folder) => {
           const href = `/folders/${folder.id}`;
-          const children = getConversationsInFolder(folder.id);
+          const children = folder.conversations;
           return (
             <li key={folder.id}>
               <SidebarRow href={href} active={pathname === href}>

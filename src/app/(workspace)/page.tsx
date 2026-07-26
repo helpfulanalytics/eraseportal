@@ -7,7 +7,7 @@ import {
   UserIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { FOLDERS, getPerson, CURRENT_USER_ID } from "@/lib/kitchen-data";
+import { getCurrentUser, getFolders } from "@/lib/kitchen-data";
 
 /**
  * Creating isn't wired to a backend, so each card links to the closest
@@ -47,8 +47,8 @@ const CREATE_ACTIONS = [
   { icon: UserIcon, label: "Client", hint: "Invite clients", href: "/clients" },
 ];
 
-export default function WorkspaceHomePage() {
-  const me = getPerson(CURRENT_USER_ID);
+export default async function WorkspaceHomePage() {
+  const [me, folders] = await Promise.all([getCurrentUser(), getFolders()]);
 
   return (
     <div className="px-14 py-12">
@@ -59,7 +59,7 @@ export default function WorkspaceHomePage() {
       <section className="mt-12">
         <SectionHeading>Recent Folders</SectionHeading>
         <ul className="mt-5 flex flex-wrap gap-6">
-          {FOLDERS.map((folder) => (
+          {folders.map((folder) => (
             <li key={folder.id}>
               <Link href={`/folders/${folder.id}`} className="group block w-46">
                 <span className="flex h-46 w-46 items-center justify-center rounded-xl bg-k-black-04-solid transition-colors group-hover:bg-k-black-06-solid">

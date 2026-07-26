@@ -13,13 +13,12 @@ import { SubTabs } from "@/components/kitchen/page-title";
 import { AvatarStack } from "@/components/kitchen/person-avatar";
 import { ShareDialog } from "@/components/kitchen/share-dialog";
 import {
-  formatBytes,
-  formatShortDate,
   getConversation,
   getConversationFiles,
   getMessages,
-  getPerson,
+  getPeople,
 } from "@/lib/kitchen-data";
+import { formatBytes, formatShortDate } from "@/lib/kitchen-format";
 
 // Next 16: both params and searchParams are Promises.
 export default async function ConversationPage({
@@ -32,10 +31,10 @@ export default async function ConversationPage({
   const { conversationId } = await params;
   const { tab } = await searchParams;
 
-  const conversation = getConversation(conversationId);
+  const conversation = await getConversation(conversationId);
   if (!conversation) notFound();
 
-  const messages = getMessages(conversationId);
+  const messages = await getMessages(conversationId);
   const showFiles = tab === "files";
   const base = `/conversations/${conversationId}`;
 
@@ -101,8 +100,11 @@ export default async function ConversationPage({
   );
 }
 
-function FilesTab({ conversationId }: { conversationId: string }) {
-  const files = getConversationFiles(conversationId);
+async function FilesTab({ conversationId }: { conversationId: string }) {
+  const [files, people] = await Promise.all([
+    getConversationFiles(conversationId),
+    getPeople(),
+  ]);
 
   const rows: Row[] = files.map((file) => ({
     id: file.id,
@@ -118,7 +120,7 @@ function FilesTab({ conversationId }: { conversationId: string }) {
           </div>
         </div>
       ),
-      author: getPerson(file.authorId)?.name ?? "—",
+      author: people[file.authorId]?.name ?? "—",
       created: formatShortDate(file.createdAt),
     },
   }));

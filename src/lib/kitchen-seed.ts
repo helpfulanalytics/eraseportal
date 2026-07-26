@@ -18,6 +18,7 @@ import type {
   Folder,
   FolderItem,
   InboxEntry,
+  Inline,
   KDocument,
   Message,
   Person,
@@ -172,6 +173,17 @@ const CONV = "convr_fd4e534129a61d43acf7e435";
 
 /** Shorthand for a paragraph of plain text. */
 const p = (v: string): Block => ({ b: "p", children: [{ t: "text", v }] });
+
+/**
+ * Bullet list from the natural authoring shape (an array of inline runs),
+ * wrapping each run in the `{ children }` object the stored form requires.
+ * See the note on `Block` in kitchen-types.ts — Firestore can't hold an array
+ * nested directly inside another array.
+ */
+const ul = (items: Inline[][]): Block => ({
+  b: "ul",
+  items: items.map((children) => ({ children })),
+});
 
 export const MESSAGES: Message[] = [
   {
@@ -389,36 +401,27 @@ export const MESSAGES: Message[] = [
       p("I spent some time digging through the Spinwheel documentation regarding the webhook configuration."),
       p("From what I'm seeing, Spinwheel does not appear to provide a separate webhook secret key the way some providers (Stripe, etc.) do. Their webhook implementation seems to work differently."),
       p("According to the documentation:"),
-      {
-        b: "ul",
-        items: [
+      ul([
           [{ t: "text", v: "Webhooks are created through the Spinwheel dashboard/API." }],
           [{ t: "text", v: "Webhooks support custom authentication headers that can be configured by the partner." }],
           [{ t: "text", v: "Spinwheel will include those headers on every webhook POST request." }],
           [{ t: "text", v: "Webhook security is expected to be handled through a combination of custom authentication headers and IP whitelisting." }],
-        ],
-      },
+      ]),
       p("Spinwheel stated that webhook authentication is handled through custom headers rather than a platform generated webhook secret."),
       {
         b: "p",
         children: [{ t: "text", v: "Sandbox IPs", bold: true }],
       },
-      {
-        b: "ul",
-        items: [
+      ul([
           [{ t: "text", v: "34.203.72.127" }],
           [{ t: "text", v: "52.2.114.95" }],
           [{ t: "text", v: "52.12.60.65" }],
-        ],
-      },
+      ]),
       {
         b: "p",
         children: [{ t: "text", v: "Production IPs", bold: true }],
       },
-      {
-        b: "ul",
-        items: [[{ t: "text", v: "44.232.30.137" }], [{ t: "text", v: "3.230.55.249" }]],
-      },
+      ul([[{ t: "text", v: "44.232.30.137" }], [{ t: "text", v: "3.230.55.249" }]]),
       {
         b: "p",
         children: [{ t: "link", href: "https://docs.spinwheel.io/docs/webhooks" }],
@@ -524,9 +527,7 @@ export const MESSAGES: Message[] = [
         b: "p",
         children: [{ t: "text", v: "Sandbox environment is live and ready for your testing:", bold: true }],
       },
-      {
-        b: "ul",
-        items: [
+      ul([
           [
             { t: "text", v: "App URL: " },
             { t: "link", href: "https://frontend-sandbox-mu.vercel.app" },
@@ -535,8 +536,7 @@ export const MESSAGES: Message[] = [
             { t: "text", v: "API URL: " },
             { t: "link", href: "https://backend-sandbox-six.vercel.app/api" },
           ],
-        ],
-      },
+      ]),
       p("It runs entirely in test/sandbox mode (Stripe and Plaid sandbox, no real money or real bank credentials involved), so feel free to put it through its paces."),
       {
         b: "p",
@@ -693,15 +693,12 @@ export const DOCUMENTS: KDocument[] = [
     blocks: [
       p("Spinwheel does not issue a platform-generated webhook secret the way Stripe does. Webhook security is handled through custom authentication headers combined with IP whitelisting."),
       { b: "p", children: [{ t: "text", v: "How it works", bold: true }] },
-      {
-        b: "ul",
-        items: [
+      ul([
           [{ t: "text", v: "Webhooks are created through the Spinwheel dashboard or API." }],
           [{ t: "text", v: "The partner configures custom authentication headers at creation time." }],
           [{ t: "text", v: "Spinwheel includes those headers on every webhook POST request." }],
           [{ t: "text", v: "Your endpoint verifies the headers and rejects anything from an unlisted IP." }],
-        ],
-      },
+      ]),
       { b: "p", children: [{ t: "text", v: "Sandbox IPs", bold: true }] },
       {
         b: "code",

@@ -1,133 +1,133 @@
 # Firebase setup
 
-The app reads and writes a real Firebase project. Until the steps below are
-done, `npm run dev` compiles but every workspace route redirects to `/sign-in`,
-and signing in fails with "Firebase isn't configured."
+**Status: live.** The app reads and writes the `kitchen-replacement` project.
+Everything below is done unless marked otherwise.
 
-## Before you start: the network
+| | |
+|---|---|
+| Project ID | `kitchen-replacement` |
+| Web app ID | `1:560444193075:web:ba6417108fba2e5fdc2646` |
+| Firestore | `(default)`, **nam5** (US multi-region) — permanent, can't be moved |
+| Storage bucket | `kitchen-replacement.firebasestorage.app` |
+| Auth | Email/Password enabled |
+| Console | https://console.firebase.google.com/project/kitchen-replacement |
 
-The Firebase CLI could not reach Google's APIs from the machine this was built
-on. The symptom is misleading — the CLI reports
-
-```
-Authentication Error: Your credentials are no longer valid.
-```
-
-but the actual failure underneath is a TLS handshake that opens and then hangs:
-
-```
-Client network socket disconnected before secure TLS connection was established
-```
-
-`storage.googleapis.com` and `firebase.google.com` were reachable at the same
-moment that `www.googleapis.com` and `firebase.googleapis.com` were not, and it
-failed identically inside and outside the tool sandbox. The machine had seven
-`utun` tunnels up and DNS pointing at `172.20.10.1`, an iPhone Personal Hotspot
-gateway.
-
-**If CLI commands hang or report invalid credentials, drop the VPN and get off
-the tether before re-authenticating.** Re-running `login --reauth` against a
-blocked network just produces the same misleading error.
-
-Quick check:
+## Running it
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" --max-time 8 https://firebase.googleapis.com
+npm run dev
 ```
 
-`000` means still blocked. Any HTTP status means you're through.
-
-## 1. Create the project
+`.env.local` is gitignored and already holds the six `NEXT_PUBLIC_*` values plus
+the base64'd service account. **A fresh clone has none of that** — copy
+`.env.local.example`, then:
 
 ```bash
-npx -y firebase-tools@latest login:list          # confirm the right account
-npx -y firebase-tools@latest projects:create kitchen-replacement \
-  --display-name "Kitchen Replacement"
+npx -y firebase-tools@latest apps:sdkconfig WEB \
+  1:560444193075:web:ba6417108fba2e5fdc2646 --project kitchen-replacement
 ```
 
-`.firebaserc` already points at `kitchen-replacement`. If the id was taken and
-you created something else, update that file to match.
-
-## 2. Turn on the three services
-
-Firestore, Auth and Storage each need enabling once, in the console:
-
-- **Firestore** — create the database in production mode. The rules in this
-  repo replace the defaults in step 5.
-- **Authentication** — enable the Email/Password provider.
-- **Storage** — create the default bucket.
-
-## 3. Register a web app and write `.env.local`
-
-```bash
-npx -y firebase-tools@latest apps:create web kitchen-web
-npx -y firebase-tools@latest apps:sdkconfig WEB <APP_ID>
-```
-
-Copy `.env.local.example` to `.env.local` and fill in the values from that
-output.
-
-Then add a service account for the server half: console → Project settings →
-Service accounts → Generate new key, and
+for the client half, and console → Project settings → Service accounts →
+Generate new key for the server half, base64'd:
 
 ```bash
 base64 -i service-account.json | pbcopy
 ```
 
-into `FIREBASE_SERVICE_ACCOUNT_B64`. Base64 because the newlines inside
-`private_key` don't survive most env-var plumbing intact. **Don't commit the
-JSON file** — `.gitignore` covers `.env*`, not a stray key elsewhere in the
-tree.
+Base64 because the newlines inside `private_key` don't survive most env-var
+plumbing intact. Delete the JSON afterwards — it bypasses every security rule.
 
-## 4. Seed the data
+## Signing in
+
+Auth identity and workspace identity are separate: Firebase knows a uid, the
+workspace knows a `Person`. They're joined by the `uid` field on the person
+document, which `getCurrentUser()` writes on first sign-in by matching email.
+
+An account exists for `victorvoca16@gmail.com`, already linked to the `tosin`
+person document. Signing in with an email that matches no person document
+leaves you authenticated but without a workspace identity, which renders as a
+redirect back to `/sign-in`.
+
+To add someone, create the auth user with a matching email — the link happens
+by itself.
+
+## Seeding
 
 ```bash
-npm run seed
+npm run seed              # refuses if `people` is non-empty
+npm run seed -- --force   # overwrite seeded documents in place
 ```
 
-Writes the dataset from `src/lib/kitchen-seed.ts` — the original mock data —
-into thirteen collections. It refuses to run if `people` is non-empty; use
-`npm run seed -- --force` to overwrite seeded documents in place. It never
-deletes.
+58 documents across 13 collections, keyed by domain id so a re-seed restores
+rather than duplicates. It never deletes: a hand-added document survives.
 
-## 5. Deploy rules and indexes
+## Rules and indexes
 
 ```bash
 npm run firebase:rules
 ```
 
-Pushes `firestore.rules`, `firestore.indexes.json` and `storage.rules`. The
-composite index on `messages` is required — conversations won't load without
-it, because `getMessages` filters on `conversationId` and orders by `createdAt`.
+Deploys `firestore.rules`, `firestore.indexes.json` and `storage.rules`.
 
-## 6. Create a user who can actually sign in
+The composite index on `messages` (`conversationId` + `createdAt`) is
+**required** — conversations won't load without it, because `getMessages`
+filters on one field and orders by another.
 
-Seeded people have no `uid`, so none of them can sign in yet. Create an auth
-user whose email matches one of the seeded person documents — `tosin`'s address
-in `kitchen-seed.ts` is the obvious choice:
+Firestore rules are default-deny by design: all reads go through the Admin SDK
+on the server, which bypasses rules entirely, so nothing legitimate ever
+reaches them. Storage rules are the load-bearing ones — the browser uploads
+directly to the bucket.
 
-```bash
-npx -y firebase-tools@latest auth:import --help   # or just use the console
+## A trap worth knowing
+
+**Firestore cannot store an array directly inside another array**, and fails
+with `Property array contains an invalid nested entity`. The `ul` block's
+`items` was originally `Inline[][]` and could not be written at all. It's now
+`Array<{ children: Inline[] }>`, built by the `ul()` helper in
+`kitchen-seed.ts`. If you add a block type, keep arrays one level deep.
+
+To check any data before writing it:
+
 ```
-
-On first sign-in, `getCurrentUser()` finds the person by email and writes the
-`uid` onto that document, linking the two permanently. Sign in with an email
-that matches no person document and you'll be authenticated but have no
-workspace identity — which renders as a redirect back to `/sign-in`.
+walk the object; flag any array whose parent is also an array
+```
 
 ## What is and isn't wired
 
-Working end to end once the above is done: sign-in, sign-up, password reset,
-sign-out, every read on every route, and file upload into a folder.
+Working end to end: sign-in, sign-up, password reset, sign-out, every read on
+every route, and file upload into a folder.
 
-Not yet: message composer writes, reactions, the Create button, board and
-document editing, and search. Those still render as chrome — see
+Not wired: message composer writes, reactions, the folder Create button, board
+and document editing, and search. Those are still chrome — see
 `docs/handoff-1.md`.
 
-## Local development without a project
+## Emulators
 
-`npm run firebase:emulators` starts the Auth, Firestore and Storage emulators
-on the ports in `firebase.json`. Note that nothing in `src/lib/firebase/`
-currently connects to them — wiring `connectFirestoreEmulator` and friends is a
-small change to `admin.ts` and `client.ts`, gated on an env flag, and hasn't
-been done.
+`npm run firebase:emulators` starts Auth, Firestore and Storage on the ports in
+`firebase.json`. Nothing in `src/lib/firebase/` connects to them yet — wiring
+`connectFirestoreEmulator` and friends behind an env flag is a small change to
+`admin.ts` and `client.ts`, and hasn't been done.
+
+## Appendix: the network failure during setup
+
+For a long stretch, every Firebase CLI command failed with
+`Authentication Error: Your credentials are no longer valid`. That message was
+misleading. The real cause was that `firebase.googleapis.com`,
+`serviceusage.googleapis.com` and `identitytoolkit.googleapis.com` were
+unreachable while other Google hosts answered fine.
+
+Ruled out along the way: VPN (none was connected), DNS tampering (system,
+Cloudflare and Google resolvers all returned identical addresses), MTU (500-byte
+pings dropped where 1372 succeeded elsewhere), and IPv6 (same hostnames failed
+on both families). Traceroute showed packets dying immediately after the
+gateway for the affected range while reaching Google's edge for others — an
+upstream carrier path problem that later cleared on its own.
+
+If CLI commands start hanging or reporting invalid credentials again, test
+reachability before re-authenticating:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" --max-time 8 https://firebase.googleapis.com
+```
+
+`000` means the network, not your credentials.

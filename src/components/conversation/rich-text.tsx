@@ -28,7 +28,7 @@ export function RichText({ blocks }: { blocks: Block[] }) {
                     •
                   </span>
                   <span>
-                    <InlineRun nodes={item} />
+                    <InlineRun nodes={item.children} />
                   </span>
                 </li>
               ))}

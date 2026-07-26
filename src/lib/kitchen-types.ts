@@ -88,7 +88,14 @@ export type Inline =
 
 export type Block =
   | { b: "p"; children: Inline[] }
-  | { b: "ul"; items: Inline[][] }
+  /**
+   * List items are `{ children }` objects rather than bare `Inline[]`, which
+   * would be the more obvious modelling. Firestore rejects an array directly
+   * inside an array — "Property array contains an invalid nested entity" — so
+   * `Inline[][]` cannot be stored at all. Wrapping each item in a map also
+   * makes the shape match the `p` block above.
+   */
+  | { b: "ul"; items: Array<{ children: Inline[] }> }
   | { b: "code"; lang?: string; v: string };
 
 export interface Reaction {

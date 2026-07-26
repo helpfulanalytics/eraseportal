@@ -1,26 +1,325 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design tokens ported from kitchen.co — see docs/kitchen-scan.md §4.
+ * The palette is deliberately alpha ramps over black/white rather than a grey
+ * scale, so surfaces tint whatever sits behind them. `-solid` variants exist
+ * for the cases where opacity can't be used (overlapping layers).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* black alpha ramp */
+  --k-black: #000;
+  --k-black-02: #00000005;
+  --k-black-03: #00000008;
+  --k-black-04: #0000000a;
+  --k-black-05: #0000000d;
+  --k-black-06: #0000000f;
+  --k-black-07: #00000012;
+  --k-black-08: #00000014;
+  --k-black-09: #00000017;
+  --k-black-10: #0000001a;
+  --k-black-12: #0000001f;
+  --k-black-16: #00000029;
+  --k-black-18: #0000002e;
+  --k-black-20: #0003;
+  --k-black-22: #00000038;
+  --k-black-23: #0000003b;
+  --k-black-24: #0000003d;
+  --k-black-25: #00000040;
+  --k-black-28: #00000047;
+  --k-black-30: #0000004d;
+  --k-black-32: #00000052;
+  --k-black-36: #0000005c;
+  --k-black-38: #00000061;
+  --k-black-40: #0006;
+  --k-black-50: #00000080;
+  --k-black-56: #0000008f;
+  --k-black-64: #000000a3;
+  --k-black-72: #000000b8;
+  --k-black-80: #000c;
+  --k-black-84: #000000d6;
+
+  /* opaque mirrors of the low end of the ramp */
+  --k-black-03-solid: #f7f7f7;
+  --k-black-04-solid: #f5f5f5;
+  --k-black-06-solid: #f0f0f0;
+  --k-black-08-solid: #ebebeb;
+
+  /* white alpha ramp */
+  --k-white: #fff;
+  --k-white-06: #ffffff0f;
+  --k-white-08: #ffffff14;
+  --k-white-10: #ffffff1a;
+  --k-white-12: #ffffff1f;
+  --k-white-16: #ffffff29;
+  --k-white-24: #ffffff3d;
+  --k-white-32: #ffffff52;
+  --k-white-40: #fff6;
+  --k-white-48: #ffffff7a;
+  --k-white-50: #ffffff80;
+  --k-white-72: #ffffffb8;
+  --k-white-84: #ffffffd6;
+
+  /* named greys */
+  --k-gray-e0: #e0e0de;
+  --k-gray-f3: #f3f3f1;
+  --k-gray-f5: #f5f5f5;
+  --k-gray-e4: #e4e4e4;
+  --k-gray-ad: #adadad;
+  --k-gray-8f: #8f8f8f;
+  --k-gray-f7: #f7f7f7;
+  --k-gray-f8: #f8f6f4;
+  --k-gray-b2: #b2b2b2;
+  --k-gray-f4: #f4f4f4;
+  --k-gray-e2: #e2e2e2;
+
+  /* accents — state only, never decoration */
+  --k-blue: #0165e1;
+  --k-blue-06: #0165e10f;
+  --k-blue-08: #0165e114;
+  --k-blue-12: #0165e11f;
+  --k-blue-16: #0165e129;
+  --k-blue-20: #0165e133;
+  --k-blue-23: #0165e13b;
+  --k-blue-30: #0165e14d;
+  --k-blue-32: #0165e152;
+  --k-red: #ee543b;
+  --k-red-08: #d34a3414;
+  --k-red-d3: #d34a34;
+  --k-red-23: #ee543b3b;
+  --k-red-32: #ee543b52;
+  --k-red-72: #ee543bb8;
+  --k-yellow: #fec30c;
+  --k-yellow-08: #fec30c14;
+  --k-yellow-16: #fec30c29;
+  --k-yellow-23: #fec30c3b;
+  --k-green: #41c660;
+  --k-green-10: #10b120;
+  --k-green-0e: #0e9c1b;
+  --k-green-23: #10b1203b;
+  --k-purple: #b25dd4;
+  --k-purple-20: #b25dd433;
+
+  /* radius ladder — explicit integers, not a calc chain */
+  --k-radius-1: 1px;
+  --k-radius-2: 2px;
+  --k-radius-3: 3px;
+  --k-radius-4: 4px;
+  --k-radius-5: 5px;
+  --k-radius-6: 6px;
+  --k-radius-7: 7px;
+  --k-radius-8: 8px;
+  --k-radius-10: 10px;
+  --k-radius-12: 12px;
+  --k-radius-14: 14px;
+  --k-radius-16: 16px;
+  --k-radius-20: 20px;
+  --k-radius-full: 999px;
+
+  /* elevation — hairline ring plus a soft drop, never a hard border */
+  --k-shadow-overlay: 0 0 0 0.5px var(--k-black-16), 0 6px 32px 0 var(--k-black-32);
+  --k-shadow-popover: 0 0 0 0.5px var(--k-black-12), 0 4px 16px 0 var(--k-black-16);
+
+  /* shell geometry */
+  --k-page-bg: var(--k-gray-f5);
+  --k-rail-width: 64px;
+  --k-sidebar-width: 295px;
+  --k-topbar-height: 46px;
+  --k-card-inset: 12px;
+
+  /* mobile plumbing — keyboard-aware viewport */
+  --k-keyboard-height: 0px;
+  --k-vh: calc(100dvh - var(--k-keyboard-height));
+  --k-safe-area-inset-bottom: 0px;
+
+  /* ---- shadcn semantic mapping ------------------------------------ */
+  /* Mapping these onto the --k-* set means every src/components/ui/*   */
+  /* primitive inherits Kitchen's look without being touched.           */
+  --background: var(--k-white);
+  --foreground: #333;
+  --card: var(--k-white);
+  --card-foreground: var(--k-black-84);
+  --popover: var(--k-white);
+  --popover-foreground: var(--k-black-84);
+  --primary: var(--k-blue);
+  --primary-foreground: var(--k-white);
+  --secondary: var(--k-black-04-solid);
+  --secondary-foreground: var(--k-black-84);
+  --muted: var(--k-black-04-solid);
+  --muted-foreground: var(--k-gray-8f);
+  --accent: var(--k-black-04);
+  --accent-foreground: var(--k-black-84);
+  --destructive: var(--k-red);
+  --destructive-foreground: var(--k-white);
+  --border: var(--k-black-08);
+  --input: var(--k-black-12);
+  --ring: var(--k-blue-32);
+  --chart-1: var(--k-blue);
+  --chart-2: var(--k-green);
+  --chart-3: var(--k-yellow);
+  --chart-4: var(--k-red);
+  --chart-5: var(--k-purple);
+  --radius: var(--k-radius-6);
+  --sidebar: var(--k-white);
+  --sidebar-foreground: var(--k-black-84);
+  --sidebar-primary: var(--k-blue);
+  --sidebar-primary-foreground: var(--k-white);
+  --sidebar-accent: var(--k-black-04);
+  --sidebar-accent-foreground: var(--k-black-84);
+  --sidebar-border: var(--k-black-08);
+  --sidebar-ring: var(--k-blue-32);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  /* Expose the raw palette to utilities: bg-k-blue, text-k-black-56, … */
+  --color-k-black: var(--k-black);
+  --color-k-black-03: var(--k-black-03);
+  --color-k-black-04: var(--k-black-04);
+  --color-k-black-05: var(--k-black-05);
+  --color-k-black-06: var(--k-black-06);
+  --color-k-black-08: var(--k-black-08);
+  --color-k-black-10: var(--k-black-10);
+  --color-k-black-12: var(--k-black-12);
+  --color-k-black-16: var(--k-black-16);
+  --color-k-black-24: var(--k-black-24);
+  --color-k-black-32: var(--k-black-32);
+  --color-k-black-36: var(--k-black-36);
+  --color-k-black-40: var(--k-black-40);
+  --color-k-black-56: var(--k-black-56);
+  --color-k-black-64: var(--k-black-64);
+  --color-k-black-72: var(--k-black-72);
+  --color-k-black-84: var(--k-black-84);
+  --color-k-black-03-solid: var(--k-black-03-solid);
+  --color-k-black-04-solid: var(--k-black-04-solid);
+  --color-k-black-06-solid: var(--k-black-06-solid);
+  --color-k-black-08-solid: var(--k-black-08-solid);
+  --color-k-white: var(--k-white);
+  --color-k-gray-e0: var(--k-gray-e0);
+  --color-k-gray-e2: var(--k-gray-e2);
+  --color-k-gray-e4: var(--k-gray-e4);
+  --color-k-gray-f3: var(--k-gray-f3);
+  --color-k-gray-f4: var(--k-gray-f4);
+  --color-k-gray-f5: var(--k-gray-f5);
+  --color-k-gray-f7: var(--k-gray-f7);
+  --color-k-gray-f8: var(--k-gray-f8);
+  --color-k-gray-8f: var(--k-gray-8f);
+  --color-k-gray-ad: var(--k-gray-ad);
+  --color-k-gray-b2: var(--k-gray-b2);
+  --color-k-blue: var(--k-blue);
+  --color-k-blue-06: var(--k-blue-06);
+  --color-k-blue-08: var(--k-blue-08);
+  --color-k-blue-12: var(--k-blue-12);
+  --color-k-blue-16: var(--k-blue-16);
+  --color-k-blue-20: var(--k-blue-20);
+  --color-k-blue-32: var(--k-blue-32);
+  --color-k-red: var(--k-red);
+  --color-k-red-08: var(--k-red-08);
+  --color-k-yellow: var(--k-yellow);
+  --color-k-yellow-08: var(--k-yellow-08);
+  --color-k-yellow-16: var(--k-yellow-16);
+  --color-k-green: var(--k-green);
+  --color-k-green-0e: var(--k-green-0e);
+  --color-k-purple: var(--k-purple);
+  --color-k-page: var(--k-page-bg);
+
+  /*
+   * Type scale is capped at 14px — Kitchen ships only 10/11/12/13/14 with
+   * line-heights of 16 and 20. Redefining Tailwind's steps downward (rather
+   * than adding new names) means a stray `text-base` can't reintroduce 16px.
+   * Page titles are the sole exception and use `--text-title`.
+   */
+  --text-2xs: 10px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 11px;
+  --text-xs--line-height: 16px;
+  --text-sm: 12px;
+  --text-sm--line-height: 16px;
+  --text-base: 13px;
+  --text-base--line-height: 20px;
+  --text-md: 14px;
+  --text-md--line-height: 20px;
+  --text-lg: 14px;
+  --text-lg--line-height: 20px;
+  --text-xl: 14px;
+  --text-xl--line-height: 20px;
+  --text-title: 32px;
+  --text-title--line-height: 38px;
+  --text-section: 20px;
+  --text-section--line-height: 26px;
+
+  /* radius steps map to Kitchen's integer ladder */
+  --radius-xs: var(--k-radius-3);
+  --radius-sm: var(--k-radius-4);
+  --radius-md: var(--k-radius-5);
+  --radius-lg: var(--k-radius-6);
+  --radius-xl: var(--k-radius-8);
+  --radius-2xl: var(--k-radius-10);
+  --radius-3xl: var(--k-radius-12);
+  --radius-4xl: var(--k-radius-16);
+
+  --shadow-overlay: var(--k-shadow-overlay);
+  --shadow-popover: var(--k-shadow-popover);
+
+  --spacing-rail: var(--k-rail-width);
+  --spacing-sidebar: var(--k-sidebar-width);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Kitchen is light-only; the dark block is kept as a structural placeholder. */
+.dark {
+  --background: var(--k-white);
+  --foreground: #333;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+    font-size: var(--text-md);
+    line-height: var(--text-md--line-height);
+  }
+  html {
+    @apply font-sans;
+  }
 }

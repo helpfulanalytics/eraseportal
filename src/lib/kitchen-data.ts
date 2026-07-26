@@ -13,6 +13,7 @@
  * Document shape is the domain type minus `id`, which lives in the document
  * key. `one()` and `many()` put it back.
  */
+import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
 import type {
@@ -320,4 +321,59 @@ export async function getCurrentUser(): Promise<Person | null> {
   }
 
   return null;
+}
+
+/* ---- writes ---------------------------------------------------------- */
+
+/**
+ * Records a file that has already been uploaded to Storage.
+ *
+ * Two writes, batched: the item document itself, and the id appended to the
+ * folder's `itemIds`. Both are required — `getFolderItems` orders by
+ * `itemIds`, so an item missing from that array exists in the collection but
+ * never renders.
+ */
+export async function createFolderFile(input: {
+  folderId: string;
+  authorId: string;
+  name: string;
+  bytes: number;
+  mime: string;
+  label: string;
+  storagePath: string;
+  downloadUrl: string;
+}): Promise<FolderItem> {
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.items).doc();
+
+  const item: FolderItem = {
+    id: doc.id,
+    kind: "file",
+    name: input.name,
+    folderId: input.folderId,
+    createdAt: new Date().toISOString(),
+    authorId: input.authorId,
+    meta: {
+      type: "file",
+      mime: input.mime,
+      label: input.label,
+      bytes: input.bytes,
+    },
+  };
+
+  const batch = db.batch();
+  const { id, ...rest } = item;
+  batch.set(doc, {
+    ...rest,
+    // Not on FolderItem: the domain type predates Storage, and nothing renders
+    // these yet. Persisted so the bytes stay reachable once something does.
+    storagePath: input.storagePath,
+    downloadUrl: input.downloadUrl,
+  });
+  batch.update(db.collection(COLLECTIONS.folders).doc(input.folderId), {
+    itemIds: FieldValue.arrayUnion(id),
+  });
+  await batch.commit();
+
+  return item;
 }

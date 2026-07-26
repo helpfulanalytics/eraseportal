@@ -2,7 +2,9 @@
 
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { authErrorMessage, signIn } from "@/lib/firebase/auth-actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -125,16 +127,30 @@ function OrSeparator() {
 }
 
 function SignInForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [reveal, setReveal] = useState(false);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
+
     setPending(true);
-    window.setTimeout(() => setPending(false), 800);
+    setError(null);
+
+    try {
+      await signIn(email.trim(), password);
+      // refresh() so the workspace layout re-runs and sees the new session
+      // cookie; push() alone would replay the cached signed-out render.
+      router.refresh();
+      router.push("/");
+    } catch (cause) {
+      setError(authErrorMessage(cause));
+      setPending(false);
+    }
   };
 
   return (
@@ -182,6 +198,12 @@ function SignInForm() {
           </InputGroupAddon>
         </InputGroup>
       </Field>
+
+      {error ? (
+        <p role="alert" className="text-destructive text-xs">
+          {error}
+        </p>
+      ) : null}
 
       <Button type="submit" size="lg" loading={pending} className="mt-1 w-full">
         Sign in

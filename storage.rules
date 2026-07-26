@@ -1,0 +1,56 @@
+rules_version = '2';
+
+/**
+ * Storage access for browser clients.
+ *
+ * Unlike Firestore, these rules are load-bearing: file bytes go from the
+ * browser straight to the bucket so uploads don't pass through a Next.js route
+ * handler and hit its request-body limit. That means the browser really does
+ * talk to Storage directly, and this file is the only thing in front of it.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    /** 25 MB, matching the upload affordance in the folder and composer UI. */
+    function withinSizeLimit() {
+      return request.resource.size < 25 * 1024 * 1024;
+    }
+
+    /**
+     * Blocks the cases that turn a file store into a malware host or an XSS
+     * vector: HTML and SVG are served from the bucket's own origin, and
+     * scripts execute there with access to whatever that origin can see.
+     */
+    function safeContentType() {
+      return !request.resource.contentType.matches('text/html.*')
+        && !request.resource.contentType.matches('image/svg.*')
+        && !request.resource.contentType.matches('application/xhtml.*');
+    }
+
+    // Files attached to a conversation message.
+    match /conversations/{conversationId}/{fileId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && withinSizeLimit() && safeContentType();
+      // No update or delete: attachments are immutable once posted. Removing
+      // one is a change to the message that references it, not to the bytes.
+      allow update, delete: if false;
+    }
+
+    // Files uploaded into a folder.
+    match /folders/{folderId}/{fileId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && withinSizeLimit() && safeContentType();
+      allow delete: if signedIn();
+      allow update: if false;
+    }
+
+    // Anything outside those two prefixes is not a path this app writes.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

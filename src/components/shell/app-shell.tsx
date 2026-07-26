@@ -1,11 +1,10 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { GlobalSearch } from "@/components/shell/global-search";
 import { IconRail } from "@/components/shell/icon-rail";
 import { Sidebar } from "@/components/shell/sidebar";
-import { useCurrentUser } from "@/components/workspace-provider";
+import { UserMenu } from "@/components/shell/user-menu";
 import type { NavFolder } from "@/lib/kitchen-types";
 
 const SIDEBAR_KEY = "workspace:sidebar-open";
@@ -55,7 +54,6 @@ export function AppShell({
     readSidebar,
     () => true,
   );
-  const currentUser = useCurrentUser();
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-k-page">
@@ -64,9 +62,7 @@ export function AppShell({
           <GlobalSearch />
         </div>
         <div className="ml-auto">
-          {currentUser ? (
-            <PersonAvatar personId={currentUser.id} className="size-7" />
-          ) : null}
+          <UserMenu />
         </div>
       </header>
 

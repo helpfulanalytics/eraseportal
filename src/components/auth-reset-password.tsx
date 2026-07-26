@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { CheckIcon, ChevronLeftIcon } from "lucide-react";
+import { requestPasswordReset } from "@/lib/firebase/auth-actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,14 +21,23 @@ export function AuthResetPasswordShowcasePage() {
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState(false);
 
-  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!email.trim() || pending) return;
+
     setPending(true);
-    window.setTimeout(() => {
-      setPending(false);
-      setSent(true);
-    }, 700);
+
+    try {
+      await requestPasswordReset(email.trim());
+    } catch {
+      // Deliberately swallowed: reporting "no such account" here would turn
+      // this form into a way to test which emails are registered. Firebase
+      // sends nothing for an unknown address, and the confirmation below is
+      // worded to be true either way.
+    }
+
+    setPending(false);
+    setSent(true);
   };
 
   const reset = () => {

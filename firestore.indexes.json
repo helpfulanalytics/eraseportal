@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    {
+      "//": "getMessages(): where conversationId == X, ordered by createdAt. Firestore builds single-field indexes automatically, but an equality filter combined with an order-by on a different field needs this composite one declared.",
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "conversationId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,41 @@
+rules_version = '2';
+
+/**
+ * Firestore access for browser clients.
+ *
+ * The app reads Firestore exclusively through firebase-admin in server
+ * components, and the Admin SDK bypasses these rules entirely. So nothing the
+ * app does legitimately arrives here — a request that reaches these rules came
+ * from somewhere other than this app's server, and default-deny is the correct
+ * answer.
+ *
+ * That is a deliberate consequence of fetching on the server: access control
+ * lives in the layout's session check and in the accessors, not in a rules
+ * file that has to reconstruct the same logic in a second language.
+ *
+ * If you later add a client-side read — a live-updating conversation thread is
+ * the likely first one — don't loosen the catch-all. Add a targeted `match`
+ * for that collection using the helpers below, so the blast radius stays the
+ * size of the feature.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny. Every collection, every operation.
+    //
+    // The shape a targeted exception should take, when one is needed:
+    //
+    //   match /messages/{messageId} {
+    //     allow read: if request.auth != null
+    //       && exists(/databases/$(database)/documents/people/$(request.auth.uid));
+    //   }
+    //
+    // Note that a membership check like that costs one document read per rule
+    // evaluation, and that it keys people documents by auth uid — which this
+    // schema does not do today (people are keyed by their domain id and carry
+    // a `uid` field). Reconcile that before relying on it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

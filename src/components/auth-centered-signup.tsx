@@ -4,6 +4,7 @@ import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { authErrorMessage, signUp } from "@/lib/firebase/auth-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardPanel } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -121,14 +122,23 @@ function SignUpForm() {
   const [password, setPassword] = useState("");
   const [reveal, setReveal] = useState(false);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password) return;
+
     setPending(true);
-    window.setTimeout(() => {
+    setError(null);
+
+    try {
+      await signUp(email.trim(), password, name.trim());
+      router.refresh();
       router.push("/onboarding");
-    }, 800);
+    } catch (cause) {
+      setError(authErrorMessage(cause));
+      setPending(false);
+    }
   };
 
   return (
@@ -190,6 +200,12 @@ function SignUpForm() {
           </InputGroupAddon>
         </InputGroup>
       </Field>
+
+      {error ? (
+        <p role="alert" className="text-destructive text-xs">
+          {error}
+        </p>
+      ) : null}
 
       <Button type="submit" size="lg" loading={pending} className="mt-1 w-full">
         Create account

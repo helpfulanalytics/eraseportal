@@ -11,12 +11,12 @@ import {
   PlusIcon,
   SearchIcon,
   StarIcon,
-  UploadIcon,
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { FileThumb } from "@/components/kitchen/file-thumb";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
+import { UploadButton } from "@/components/kitchen/upload-button";
 import { getFolder, getFolderItems } from "@/lib/kitchen-data";
 import { formatBytes, formatShortDate, itemHref } from "@/lib/kitchen-format";
 import type { ItemMeta } from "@/lib/kitchen-types";
@@ -139,14 +139,7 @@ export default async function FolderPage({
               Create
               <ChevronDownIcon className="size-3.5 opacity-60" strokeWidth={1.8} />
             </button>
-            <button
-              type="button"
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-k-blue px-3 text-k-white text-md transition-opacity hover:opacity-90"
-            >
-              <UploadIcon className="size-3.5" strokeWidth={1.8} />
-              Upload or Drag
-              <ChevronDownIcon className="size-3.5 opacity-70" strokeWidth={1.8} />
-            </button>
+            <UploadButton folderId={folderId} />
           </div>
         </div>
 

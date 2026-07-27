@@ -2,7 +2,6 @@
 
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { authErrorMessage, signIn } from "@/lib/firebase/auth-actions";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,12 @@ import {
 } from "@/components/ui/input-group";
 import { Separator } from "@/components/ui/separator";
 
-export function AuthCenteredSigninShowcasePage() {
+export function AuthCenteredSigninShowcasePage({
+  next = "/",
+}: {
+  /** Sanitised on the server by `requireGuest` — see lib/navigation.ts. */
+  next?: string;
+}) {
   return (
     <div className="relative flex min-h-svh items-center justify-center bg-background px-4 py-12 text-foreground">
       <PageBackdrop />
@@ -41,7 +45,7 @@ export function AuthCenteredSigninShowcasePage() {
           <CardPanel className="mt-6 flex flex-col gap-5 p-0">
             <OAuthRow />
             <OrSeparator />
-            <SignInForm />
+            <SignInForm next={next} />
             <FooterLinks />
           </CardPanel>
         </Card>
@@ -126,8 +130,7 @@ function OrSeparator() {
   );
 }
 
-function SignInForm() {
-  const router = useRouter();
+function SignInForm({ next }: { next: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -143,10 +146,23 @@ function SignInForm() {
 
     try {
       await signIn(email.trim(), password);
-      // refresh() so the workspace layout re-runs and sees the new session
-      // cookie; push() alone would replay the cached signed-out render.
-      router.refresh();
-      router.push("/");
+
+      // A full document navigation, deliberately, not router.push().
+      //
+      // The session cookie is set by a fetch to /api/auth/session, which the
+      // App Router knows nothing about — its client cache still holds the
+      // signed-out render of the destination. router.refresh() and
+      // router.push() then race, and push routinely wins with the stale
+      // payload, so the workspace bounces straight back to sign-in and the
+      // page appears to do nothing at all.
+      //
+      // Reloading re-requests everything with the new cookie and can't race.
+      // Sign-in happens once per session, so the cost of a hard nav is fine.
+      window.location.replace(next);
+
+      // No setPending(false): the button stays in its loading state until the
+      // document unloads, rather than flashing back to idle.
+      return;
     } catch (cause) {
       setError(authErrorMessage(cause));
       setPending(false);

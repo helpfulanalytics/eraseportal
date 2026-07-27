@@ -5,11 +5,9 @@
  *
  * Sign-out has to clear both halves of the session — the client SDK's own
  * state and the server's cookie — so it goes through `signOut()` in
- * auth-actions rather than calling either one directly. `router.refresh()`
- * afterwards makes the workspace layout re-evaluate and redirect.
+ * auth-actions rather than calling either one directly.
  */
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { useCurrentUser } from "@/components/workspace-provider";
 import {
@@ -23,7 +21,6 @@ import {
 import { signOut } from "@/lib/firebase/auth-actions";
 
 export function UserMenu() {
-  const router = useRouter();
   const currentUser = useCurrentUser();
   const [pending, setPending] = useState(false);
 
@@ -33,8 +30,11 @@ export function UserMenu() {
     setPending(true);
     try {
       await signOut();
-      router.refresh();
-      router.push("/sign-in");
+      // Hard navigation, mirroring sign-in: the cookie was cleared by a fetch
+      // the router doesn't know about, so its cache still holds signed-in
+      // renders of every workspace route. A client-side push would show them.
+      window.location.replace("/sign-in");
+      return;
     } catch {
       // Leaving the menu in a pending state would strand the user with no way
       // out; let them try again instead.

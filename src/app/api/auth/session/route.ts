@@ -41,9 +41,13 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch {
-    // A rejected token is the expected failure here — expired, malformed, or
-    // minted for another project. Nothing worth distinguishing for the caller.
+  } catch (cause) {
+    // The caller gets nothing beyond "invalid" — distinguishing expired from
+    // malformed from wrong-project only helps an attacker. But swallowing it
+    // entirely makes a misconfigured server indistinguishable from a bad
+    // token, which costs far more debugging time than it saves, so the real
+    // reason goes to the server log.
+    console.error("[auth/session] createSessionCookie failed:", cause);
     return NextResponse.json({ error: "Invalid token." }, { status: 401 });
   }
 }

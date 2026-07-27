@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardPanel } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -70,7 +69,6 @@ function BrandMark() {
 }
 
 function OnboardingFlow() {
-  const router = useRouter();
   const [step, setStep] = useState(0);
   const [workspace, setWorkspace] = useState("");
   const [invitees, setInvitees] = useState<string[]>([]);
@@ -123,7 +121,9 @@ function OnboardingFlow() {
         <ReadyStep
           workspace={workspace || "Untitled"}
           count={invitees.length}
-          onFinish={() => router.push("/app")}
+          // Was "/app", which has never been a route in this app — finishing
+          // onboarding 404'd. The workspace lives at "/".
+          onFinish={() => window.location.assign("/")}
         />
       ) : null}
     </div>

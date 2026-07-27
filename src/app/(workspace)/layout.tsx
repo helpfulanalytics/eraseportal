@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { PATHNAME_HEADER } from "@/proxy";
 import { AppShell } from "@/components/shell/app-shell";
 import { WorkspaceProvider } from "@/components/workspace-provider";
 import {
@@ -23,7 +25,17 @@ export default async function WorkspaceLayout({
   children: ReactNode;
 }) {
   const currentUser = await getCurrentUser();
-  if (!currentUser) redirect("/sign-in");
+
+  if (!currentUser) {
+    // Reached with a cookie that exists but doesn't verify — expired, revoked,
+    // or minted for another project. The proxy waved it through on presence
+    // alone, so this is where it actually gets rejected. Carry the destination
+    // so the visitor resumes where they were aiming rather than at the
+    // workspace root.
+    const pathname = (await headers()).get(PATHNAME_HEADER);
+    const next = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname)}` : "";
+    redirect(`/sign-in${next}`);
+  }
 
   // Fetched in parallel — none depend on each other, and this layout blocks
   // every route beneath it.

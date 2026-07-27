@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { authErrorMessage, signUp } from "@/lib/firebase/auth-actions";
@@ -116,7 +115,6 @@ function OrSeparator() {
 }
 
 function SignUpForm() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -133,8 +131,11 @@ function SignUpForm() {
 
     try {
       await signUp(email.trim(), password, name.trim());
-      router.refresh();
-      router.push("/onboarding");
+      // Hard navigation for the same reason as sign-in: the session cookie was
+      // set outside the router's knowledge, so a client-side push can render
+      // the destination with a stale, signed-out payload.
+      window.location.replace("/onboarding");
+      return;
     } catch (cause) {
       setError(authErrorMessage(cause));
       setPending(false);

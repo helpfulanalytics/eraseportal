@@ -40,7 +40,24 @@ const ADMIN_APP_NAME = "kitchen-admin";
  */
 function credential() {
   const encoded = process.env.FIREBASE_SERVICE_ACCOUNT_B64;
-  if (!encoded) return applicationDefault();
+
+  if (!encoded) {
+    // applicationDefault() constructs happily and only fails later, deep in
+    // whatever call needed it — which surfaces as an opaque 401 from
+    // /api/auth/session rather than anything pointing at credentials. If
+    // there's no ADC to fall back to, say so here instead.
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      throw new Error(
+        "No Firebase Admin credentials. FIREBASE_SERVICE_ACCOUNT_B64 is unset " +
+          "and there are no Application Default Credentials.\n" +
+          "If you just added it to .env.local, restart the dev server — env is " +
+          "read at process start, and the initialised app is cached for the " +
+          "life of the process.\n" +
+          "See docs/firebase-setup.md.",
+      );
+    }
+    return applicationDefault();
+  }
 
   try {
     const json = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));

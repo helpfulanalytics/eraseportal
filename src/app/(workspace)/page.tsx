@@ -7,44 +7,29 @@ import {
   UserIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { CreateMenu, type Creatable } from "@/components/kitchen/create-menu";
 import { getCurrentUser, getFolders } from "@/lib/kitchen-data";
 
 /**
- * Creating isn't wired to a backend, so each card links to the closest
- * existing surface — a dead button reads as broken, a link doesn't.
+ * Each card now creates the thing it names, opening the same panel the
+ * sidebar's `+` uses with that type preselected.
+ *
+ * They previously linked to seeded ids — `/boards/brd_9f2c4a71e08d` and
+ * friends — which 404'd the moment the workspace was reset. A card that
+ * creates is both the intent and the only version that can't go stale.
  */
-const CREATE_ACTIONS = [
-  {
-    icon: FolderIcon,
-    label: "New Folder",
-    hint: "Organize everything",
-    href: "/templates",
-  },
-  {
-    icon: LayoutTemplateIcon,
-    label: "Board",
-    hint: "Track projects",
-    href: "/boards/brd_9f2c4a71e08d",
-  },
-  {
-    icon: MessageSquareIcon,
-    label: "Conversation",
-    hint: "Discuss anything",
-    href: "/conversations/convr_fd4e534129a61d43acf7e435",
-  },
-  {
-    icon: LinkIcon,
-    label: "Embed",
-    hint: "Add third-party apps",
-    href: "/embeds/emb_7c15de8a03b2",
-  },
-  {
-    icon: FileTextIcon,
-    label: "Document",
-    hint: "Curate content",
-    href: "/documents/doc_4b71ca9e2f30",
-  },
-  { icon: UserIcon, label: "Client", hint: "Invite clients", href: "/clients" },
+const CREATE_ACTIONS: Array<{
+  icon: React.ElementType;
+  label: string;
+  hint: string;
+  creates: Creatable;
+}> = [
+  { icon: FolderIcon, label: "New Folder", hint: "Organize everything", creates: "folder" },
+  { icon: LayoutTemplateIcon, label: "Board", hint: "Track projects", creates: "board" },
+  { icon: MessageSquareIcon, label: "Conversation", hint: "Discuss anything", creates: "conversation" },
+  { icon: LinkIcon, label: "Embed", hint: "Add third-party apps", creates: "embed" },
+  { icon: FileTextIcon, label: "Document", hint: "Curate content", creates: "document" },
+  { icon: UserIcon, label: "Client", hint: "Invite clients", creates: "client" },
 ];
 
 export default async function WorkspaceHomePage() {
@@ -85,9 +70,10 @@ export default async function WorkspaceHomePage() {
         <ul className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
           {CREATE_ACTIONS.map((action) => (
             <li key={action.label}>
-              <Link
-                href={action.href}
-                className="flex w-full flex-col gap-2 rounded-xl border border-k-black-08 px-4 py-4 text-left transition-colors hover:border-k-black-12 hover:bg-k-black-02"
+              <CreateMenu
+                initial={action.creates}
+                folders={folders}
+                triggerClassName="flex h-auto w-full flex-col items-start gap-2 rounded-xl border border-k-black-08 px-4 py-4 text-left transition-colors hover:border-k-black-12 hover:bg-k-black-02"
               >
                 <action.icon
                   className="size-[18px] text-k-black-84"
@@ -99,7 +85,7 @@ export default async function WorkspaceHomePage() {
                 <span className="block text-k-black-40 text-md">
                   {action.hint}
                 </span>
-              </Link>
+              </CreateMenu>
             </li>
           ))}
         </ul>

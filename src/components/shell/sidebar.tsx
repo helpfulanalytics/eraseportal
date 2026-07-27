@@ -47,7 +47,7 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
         <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
           {workspace.name}
         </h2>
-        <CreateMenu />
+        <CreateMenu folders={folders} />
       </div>
 
       <ul className="flex flex-col gap-px px-2">

@@ -27,6 +27,7 @@ import type {
   FolderAccess,
   FolderItem,
   InboxEntry,
+  ItemKind,
   ItemMeta,
   KDocument,
   LibraryFile,
@@ -527,18 +528,14 @@ export async function createConversation(input: {
   };
 
   const batch = db.batch();
-  const { id } = conversation;
   batch.set(doc, withoutId(conversation));
-  batch.set(db.collection(COLLECTIONS.items).doc(id), {
+  linkItemIntoFolder(batch, {
+    id: doc.id,
     kind: "conversation",
     name: input.name,
     folderId: input.folderId,
-    createdAt: new Date().toISOString(),
     authorId: input.authorId,
     meta: { type: "conversation", messageCount: 0 },
-  });
-  batch.update(db.collection(COLLECTIONS.folders).doc(input.folderId), {
-    itemIds: FieldValue.arrayUnion(id),
   });
   await batch.commit();
 
@@ -601,4 +598,186 @@ export async function setTaskCompleted(
       { completed, status: completed ? "done" : "todo" },
       { merge: true },
     );
+}
+
+/* ---- creating folder contents ---------------------------------------- */
+
+/**
+ * Everything that lives inside a folder needs three writes, not one: its own
+ * document, the `items` row the folder listing renders, and the id appended to
+ * the folder's `itemIds` — which is what `getFolderItems` orders by. An item
+ * missing from that array exists in its collection and never appears anywhere.
+ *
+ * This stages the second and third onto a caller-supplied batch so the whole
+ * creation commits atomically. The item deliberately shares the subject's id,
+ * which is the convention the seeded data uses and what lets `itemHref` build
+ * a link straight from a folder row.
+ */
+function linkItemIntoFolder(
+  batch: FirebaseFirestore.WriteBatch,
+  input: {
+    id: string;
+    kind: ItemKind;
+    name: string;
+    folderId: string;
+    authorId: string;
+    meta: ItemMeta;
+  },
+): void {
+  const db = adminDb();
+  batch.set(db.collection(COLLECTIONS.items).doc(input.id), {
+    kind: input.kind,
+    name: input.name,
+    folderId: input.folderId,
+    createdAt: new Date().toISOString(),
+    authorId: input.authorId,
+    meta: input.meta,
+  });
+  batch.update(db.collection(COLLECTIONS.folders).doc(input.folderId), {
+    itemIds: FieldValue.arrayUnion(input.id),
+  });
+}
+
+/** Columns a new board starts with, matching the seeded board's shape. */
+const DEFAULT_BOARD_COLUMNS = [
+  { id: "col_todo", name: "To Do" },
+  { id: "col_progress", name: "In Progress" },
+  { id: "col_blocked", name: "Blocked" },
+  { id: "col_done", name: "Done" },
+];
+
+export async function createBoard(input: {
+  folderId: string;
+  name: string;
+  authorId: string;
+}): Promise<Board> {
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.boards).doc();
+
+  const board: Board = {
+    id: doc.id,
+    name: input.name,
+    folderId: input.folderId,
+    columns: DEFAULT_BOARD_COLUMNS.map((c) => ({ ...c, cards: [] })),
+  };
+
+  const batch = db.batch();
+  batch.set(doc, withoutId(board));
+  linkItemIntoFolder(batch, {
+    id: doc.id,
+    kind: "board",
+    name: input.name,
+    folderId: input.folderId,
+    authorId: input.authorId,
+    meta: { type: "board", cardCount: 0 },
+  });
+  await batch.commit();
+
+  return board;
+}
+
+export async function createDocument(input: {
+  folderId: string;
+  name: string;
+  authorId: string;
+}): Promise<KDocument> {
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.documents).doc();
+  const now = new Date().toISOString();
+
+  const document: KDocument = {
+    id: doc.id,
+    name: input.name,
+    folderId: input.folderId,
+    authorId: input.authorId,
+    updatedAt: now,
+    blocks: [],
+  };
+
+  const batch = db.batch();
+  batch.set(doc, withoutId(document));
+  linkItemIntoFolder(batch, {
+    id: doc.id,
+    kind: "document",
+    name: input.name,
+    folderId: input.folderId,
+    authorId: input.authorId,
+    meta: { type: "document", updatedAt: now },
+  });
+  await batch.commit();
+
+  return document;
+}
+
+/**
+ * Backs both the Embed and Link rows in the Create panel.
+ *
+ * The domain model has no `link` kind — `ItemKind` stops at embed — so a Link
+ * is stored as an embed whose provider says so. The distinction the menu draws
+ * (embedded app vs. external resource) is therefore presentational only. Give
+ * Link its own kind if it ever needs to render differently.
+ */
+export async function createEmbed(input: {
+  folderId: string;
+  name: string;
+  url: string;
+  provider: string;
+  authorId: string;
+}): Promise<Embed> {
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.embeds).doc();
+
+  const embed: Embed = {
+    id: doc.id,
+    name: input.name,
+    folderId: input.folderId,
+    url: input.url,
+    provider: input.provider,
+  };
+
+  const batch = db.batch();
+  batch.set(doc, withoutId(embed));
+  linkItemIntoFolder(batch, {
+    id: doc.id,
+    kind: "embed",
+    name: input.name,
+    folderId: input.folderId,
+    authorId: input.authorId,
+    meta: { type: "embed", provider: input.provider },
+  });
+  await batch.commit();
+
+  return embed;
+}
+
+/**
+ * Adds a client to the workspace directory.
+ *
+ * A client is a Person with `kind: "client"` — there's no separate collection.
+ * They have no `uid` until they sign in with a matching email, at which point
+ * `getCurrentUser` adopts this document rather than provisioning a new one.
+ */
+export async function createClient(input: {
+  name: string;
+  email: string;
+}): Promise<Person> {
+  const doc = adminDb().collection(COLLECTIONS.people).doc();
+
+  const person: Person = {
+    id: doc.id,
+    name: input.name,
+    handle: (input.email.split("@")[0] || input.name).toLowerCase(),
+    email: input.email,
+    initials: initialsFrom(input.name),
+    color:
+      PERSON_COLORS[
+        Math.abs(
+          [...doc.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0),
+        ) % PERSON_COLORS.length
+      ],
+    kind: "client",
+  };
+
+  await doc.set(withoutId(person));
+  return person;
 }

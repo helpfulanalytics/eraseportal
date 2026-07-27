@@ -24,6 +24,7 @@ import type {
   ConversationFile,
   Embed,
   Folder,
+  FolderAccess,
   FolderItem,
   InboxEntry,
   ItemMeta,
@@ -471,11 +472,28 @@ export async function setWorkspaceName(name: string): Promise<void> {
     .set({ name }, { merge: true });
 }
 
-export async function createFolder(name: string): Promise<Folder> {
+export async function createFolder(input: {
+  name: string;
+  description?: string;
+  access?: FolderAccess;
+  internalRole?: "viewer" | "editor";
+}): Promise<Folder> {
   await ensureWorkspace();
 
   const doc = adminDb().collection(COLLECTIONS.folders).doc();
-  const folder: Folder = { id: doc.id, name, starred: false, itemIds: [] };
+  const folder: Folder = {
+    id: doc.id,
+    name: input.name,
+    starred: false,
+    itemIds: [],
+    access: input.access ?? "private",
+    // Firestore rejects `undefined`, so optional fields are spread in only
+    // when they have a value rather than written as undefined.
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.access === "internal" && input.internalRole
+      ? { internalRole: input.internalRole }
+      : {}),
+  };
 
   await doc.set(withoutId(folder));
   return folder;

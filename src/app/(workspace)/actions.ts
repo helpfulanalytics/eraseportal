@@ -19,6 +19,7 @@ import {
   setTaskCompleted,
   setWorkspaceName,
 } from "@/lib/kitchen-data";
+import type { FolderAccess } from "@/lib/kitchen-types";
 
 /** Every mutation needs an identity; none of them accept one as input. */
 async function requireUser() {
@@ -27,13 +28,22 @@ async function requireUser() {
   return me;
 }
 
-export async function createFolderAction(name: string): Promise<string> {
+export async function createFolderAction(input: {
+  name: string;
+  description?: string;
+  access?: FolderAccess;
+  internalRole?: "viewer" | "editor";
+}): Promise<string> {
   await requireUser();
 
-  const trimmed = name.trim();
+  const trimmed = input.name.trim();
   if (!trimmed) throw new Error("A folder needs a name.");
 
-  const folder = await createFolder(trimmed);
+  const folder = await createFolder({
+    ...input,
+    name: trimmed,
+    description: input.description?.trim() || undefined,
+  });
 
   // The sidebar's folder tree is built in the workspace layout, so the whole
   // segment has to re-render — not just the page that triggered this.

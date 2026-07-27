@@ -41,6 +41,16 @@ export interface Person {
   uid?: string;
 }
 
+/**
+ * Folder visibility, as offered by the Create Folder dialog.
+ *
+ * **Stored, not enforced.** Nothing in the read path consults this yet —
+ * `getFolders` returns every folder to every signed-in user. Treat it as a
+ * recorded intention until access control exists, and don't rely on
+ * `private` to hide anything. Same caveat as `Message.isNote`.
+ */
+export type FolderAccess = "private" | "clients" | "internal";
+
 export interface Folder {
   id: string;
   name: string;
@@ -51,6 +61,10 @@ export interface Folder {
   description?: string;
   starred: boolean;
   itemIds: string[];
+  /** Absent on folders seeded before the dialog existed. */
+  access?: FolderAccess;
+  /** Only meaningful when `access` is `internal`. */
+  internalRole?: "viewer" | "editor";
 }
 
 /** Metadata varies by kind — conversations count messages, files carry bytes. */

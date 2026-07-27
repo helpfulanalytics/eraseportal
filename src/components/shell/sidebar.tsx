@@ -2,14 +2,13 @@
 
 import {
   ArchiveIcon,
-  ChevronDownIcon,
   CircleCheckIcon,
   FolderIcon,
   MessageSquareIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CreateFolderButton } from "@/components/kitchen/create-inline";
+import { CreateMenu } from "@/components/kitchen/create-menu";
 import { useWorkspace } from "@/components/workspace-provider";
 import type { NavFolder } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
@@ -48,14 +47,7 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
         <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
           {workspace.name}
         </h2>
-        <CreateFolderButton />
-        <button
-          type="button"
-          aria-label="Workspace menu"
-          className="flex size-6 items-center justify-center rounded-md text-k-black-56 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
-        >
-          <ChevronDownIcon className="size-4" strokeWidth={1.7} />
-        </button>
+        <CreateMenu />
       </div>
 
       <ul className="flex flex-col gap-px px-2">

@@ -15,7 +15,7 @@ import { notFound } from "next/navigation";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { FileThumb } from "@/components/kitchen/file-thumb";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
-import { CreateConversationButton } from "@/components/kitchen/create-inline";
+import { CreateMenu } from "@/components/kitchen/create-menu";
 import { UploadButton } from "@/components/kitchen/upload-button";
 import { getFolder, getFolderItems } from "@/lib/kitchen-data";
 import { formatBytes, formatShortDate, itemHref } from "@/lib/kitchen-format";
@@ -131,7 +131,10 @@ export default async function FolderPage({
           <FilterChip label="Created" />
 
           <div className="ml-auto flex items-center gap-2">
-            <CreateConversationButton folderId={folderId} />
+            <CreateMenu
+              folderId={folderId}
+              triggerClassName="h-8 gap-1.5 rounded-lg bg-k-black-06 px-3 text-k-black-84 hover:bg-k-black-08"
+            />
             <UploadButton folderId={folderId} />
           </div>
         </div>

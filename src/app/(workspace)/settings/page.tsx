@@ -1,5 +1,6 @@
 import { PageTitleTabs, SubTabs } from "@/components/kitchen/page-title";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
+import { WorkspaceNameField } from "@/components/kitchen/workspace-name-field";
 import { getPeople, getWorkspace } from "@/lib/kitchen-data";
 
 const TABS = ["general", "members", "billing"] as const;
@@ -43,10 +44,7 @@ async function General() {
   return (
     <div className="flex flex-col gap-6">
       <Field label="Workspace name" hint="Shown in the sidebar and on shared links.">
-        <input
-          defaultValue={workspace.name}
-          className="h-8 w-full rounded-lg border border-k-black-08 px-3 text-k-black-84 text-md outline-none focus:border-k-blue"
-        />
+        <WorkspaceNameField initial={workspace.name} />
       </Field>
 
       <Field label="Workspace URL" hint="Clients reach your workspace at this address.">

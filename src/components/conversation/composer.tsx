@@ -7,19 +7,45 @@ import {
   NotebookPenIcon,
   PaperclipIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { sendMessageAction } from "@/app/(workspace)/actions";
 import { cn } from "@/lib/utils";
 
 /**
  * Message composer. `isNote` distinguishes a client-visible message from an
- * internal note — the placeholder ("message or note") advertises both, so the
- * toggle is wired even though nothing is persisted yet.
+ * internal note.
+ *
+ * NOTE: that distinction is currently cosmetic end to end — `getMessages`
+ * returns notes to every reader, so marking one internal changes how it looks
+ * and nothing else. Don't rely on it to hide anything from a client account
+ * until the read path filters on it.
  */
-export function Composer() {
+export function Composer({ conversationId }: { conversationId: string }) {
   const [value, setValue] = useState("");
   const [isNote, setIsNote] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-  const canSend = value.trim().length > 0;
+  const canSend = value.trim().length > 0 && !pending;
+
+  const send = () => {
+    if (!canSend) return;
+    const text = value;
+
+    // Clear optimistically — the textarea should feel immediate, and the
+    // failure path puts the text back rather than losing what was typed.
+    setValue("");
+    setError(null);
+
+    startTransition(async () => {
+      try {
+        await sendMessageAction(conversationId, text, isNote);
+      } catch {
+        setValue(text);
+        setError("Couldn't send that. Try again.");
+      }
+    });
+  };
 
   return (
     <div className="shrink-0 px-5 pb-5">
@@ -34,6 +60,14 @@ export function Composer() {
         <textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            // Cmd/Ctrl+Enter sends; plain Enter stays a newline, because these
+            // are long-form client messages rather than chat one-liners.
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              send();
+            }
+          }}
           rows={2}
           placeholder={
             isNote
@@ -47,9 +81,10 @@ export function Composer() {
           <button
             type="button"
             disabled={!canSend}
+            onClick={send}
             className="mr-1 flex h-8 items-center rounded-lg bg-k-blue px-4 font-medium text-k-white text-md transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            Send
+            {pending ? "Sending…" : "Send"}
           </button>
 
           <ComposerAction label="Attach file">
@@ -77,6 +112,12 @@ export function Composer() {
           </ComposerAction>
         </div>
       </div>
+
+      {error ? (
+        <p role="alert" className="mt-1.5 px-1 text-k-red text-sm">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

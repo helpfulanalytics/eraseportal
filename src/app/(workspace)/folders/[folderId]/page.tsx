@@ -8,7 +8,6 @@ import {
   LayoutTemplateIcon,
   LinkIcon,
   MessageSquareIcon,
-  PlusIcon,
   SearchIcon,
   StarIcon,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import { notFound } from "next/navigation";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { FileThumb } from "@/components/kitchen/file-thumb";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
+import { CreateConversationButton } from "@/components/kitchen/create-inline";
 import { UploadButton } from "@/components/kitchen/upload-button";
 import { getFolder, getFolderItems } from "@/lib/kitchen-data";
 import { formatBytes, formatShortDate, itemHref } from "@/lib/kitchen-format";
@@ -131,14 +131,7 @@ export default async function FolderPage({
           <FilterChip label="Created" />
 
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-k-black-06 px-3 text-k-black-84 text-md transition-colors hover:bg-k-black-08"
-            >
-              <PlusIcon className="size-3.5" strokeWidth={1.8} />
-              Create
-              <ChevronDownIcon className="size-3.5 opacity-60" strokeWidth={1.8} />
-            </button>
+            <CreateConversationButton folderId={folderId} />
             <UploadButton folderId={folderId} />
           </div>
         </div>

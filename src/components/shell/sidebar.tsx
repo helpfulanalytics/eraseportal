@@ -6,10 +6,10 @@ import {
   CircleCheckIcon,
   FolderIcon,
   MessageSquareIcon,
-  PlusIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CreateFolderButton } from "@/components/kitchen/create-inline";
 import { useWorkspace } from "@/components/workspace-provider";
 import type { NavFolder } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
@@ -48,13 +48,7 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
         <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
           {workspace.name}
         </h2>
-        <button
-          type="button"
-          aria-label="Create"
-          className="flex size-6 items-center justify-center rounded-md text-k-black-56 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
-        >
-          <PlusIcon className="size-4" strokeWidth={1.7} />
-        </button>
+        <CreateFolderButton />
         <button
           type="button"
           aria-label="Workspace menu"

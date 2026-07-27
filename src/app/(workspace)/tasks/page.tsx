@@ -8,6 +8,7 @@ import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { PageTitleTabs, SubTabs } from "@/components/kitchen/page-title";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { TaskCalendar } from "@/components/kitchen/task-calendar";
+import { TaskCheckbox } from "@/components/kitchen/task-checkbox";
 import { getPeople, getTasks } from "@/lib/kitchen-data";
 import { formatShortDate } from "@/lib/kitchen-format";
 
@@ -58,7 +59,16 @@ export default async function TasksPage({
   const rows: Row[] = sorted.map((task) => ({
     id: task.id,
     cells: {
-      title: <span className="text-k-black-84 text-md">{task.title}</span>,
+      title: (
+        <span className="flex min-w-0 items-center gap-2.5">
+          <TaskCheckbox
+            taskId={task.id}
+            completed={task.completed}
+            title={task.title}
+          />
+          <span className="truncate text-k-black-84 text-md">{task.title}</span>
+        </span>
+      ),
       status: (
         <span
           className={`inline-block rounded px-1.5 py-0.5 text-2xs ${

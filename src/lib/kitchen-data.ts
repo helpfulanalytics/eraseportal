@@ -17,6 +17,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
 import type {
+  Block,
   Board,
   Company,
   Conversation,
@@ -62,6 +63,13 @@ type Query = FirebaseFirestore.Query;
 
 function hydrate<T>(doc: Doc): T {
   return { id: doc.id, ...doc.data() } as T;
+}
+
+/** Inverse of `hydrate`: the id lives in the document key, not the body. */
+function withoutId<T extends { id: string }>(doc: T): Omit<T, "id"> {
+  const rest = { ...doc } as Partial<T>;
+  delete rest.id;
+  return rest as Omit<T, "id">;
 }
 
 async function one<T>(collection: string, id: string): Promise<T | undefined> {
@@ -441,4 +449,138 @@ export async function createFolderFile(input: {
   await batch.commit();
 
   return item;
+}
+
+/**
+ * Bootstrap the workspace document if it doesn't exist yet.
+ *
+ * `getWorkspace` degrades to a placeholder name rather than failing, which
+ * keeps an empty database renderable — but the first real write should put a
+ * document behind it so the name is editable in Settings.
+ */
+export async function ensureWorkspace(): Promise<void> {
+  const ref = adminDb().collection(COLLECTIONS.workspaces).doc(WORKSPACE_ID);
+  const doc = await ref.get();
+  if (!doc.exists) await ref.set({ name: "Workspace" });
+}
+
+export async function setWorkspaceName(name: string): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.workspaces)
+    .doc(WORKSPACE_ID)
+    .set({ name }, { merge: true });
+}
+
+export async function createFolder(name: string): Promise<Folder> {
+  await ensureWorkspace();
+
+  const doc = adminDb().collection(COLLECTIONS.folders).doc();
+  const folder: Folder = { id: doc.id, name, starred: false, itemIds: [] };
+
+  await doc.set(withoutId(folder));
+  return folder;
+}
+
+/**
+ * A conversation is three writes, not one: the conversation itself, the
+ * `items` row that makes it show up in the folder listing, and the id appended
+ * to the folder's `itemIds` (which is what `getFolderItems` orders by). Miss
+ * any of them and it exists but never renders.
+ *
+ * The item and the conversation deliberately share an id — that's the
+ * convention the seeded data uses, and `itemHref` relies on it to build the
+ * link straight from a folder row.
+ */
+export async function createConversation(input: {
+  folderId: string;
+  name: string;
+  authorId: string;
+  participantIds: string[];
+}): Promise<Conversation> {
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.conversations).doc();
+
+  const conversation: Conversation = {
+    id: doc.id,
+    name: input.name,
+    folderId: input.folderId,
+    participantIds: input.participantIds,
+    starred: false,
+  };
+
+  const batch = db.batch();
+  const { id } = conversation;
+  batch.set(doc, withoutId(conversation));
+  batch.set(db.collection(COLLECTIONS.items).doc(id), {
+    kind: "conversation",
+    name: input.name,
+    folderId: input.folderId,
+    createdAt: new Date().toISOString(),
+    authorId: input.authorId,
+    meta: { type: "conversation", messageCount: 0 },
+  });
+  batch.update(db.collection(COLLECTIONS.folders).doc(input.folderId), {
+    itemIds: FieldValue.arrayUnion(id),
+  });
+  await batch.commit();
+
+  return conversation;
+}
+
+/**
+ * Post a message. Plain text in, structured blocks out — one paragraph per
+ * blank-line-separated chunk, matching the shape the renderer expects and the
+ * seeded data uses.
+ *
+ * Also bumps the folder item's `messageCount`, since that's denormalised onto
+ * the item for the folder listing and would otherwise drift immediately.
+ */
+export async function sendMessage(input: {
+  conversationId: string;
+  authorId: string;
+  text: string;
+  isNote?: boolean;
+}): Promise<Message> {
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.messages).doc();
+
+  const body: Block[] = input.text
+    .split(/\n{2,}/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => ({ b: "p", children: [{ t: "text", v: chunk }] }));
+
+  const message: Message = {
+    id: doc.id,
+    conversationId: input.conversationId,
+    authorId: input.authorId,
+    createdAt: new Date().toISOString(),
+    body,
+    ...(input.isNote ? { isNote: true } : {}),
+  };
+
+  const batch = db.batch();
+  batch.set(doc, withoutId(message));
+  // The conversation's folder item carries a messageCount for the folder list.
+  batch.set(
+    db.collection(COLLECTIONS.items).doc(input.conversationId),
+    { meta: { type: "conversation", messageCount: FieldValue.increment(1) } },
+    { merge: true },
+  );
+  await batch.commit();
+
+  return message;
+}
+
+export async function setTaskCompleted(
+  taskId: string,
+  completed: boolean,
+): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.tasks)
+    .doc(taskId)
+    .set(
+      { completed, status: completed ? "done" : "todo" },
+      { merge: true },
+    );
 }

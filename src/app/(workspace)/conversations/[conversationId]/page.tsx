@@ -93,7 +93,7 @@ export default async function ConversationPage({
           <div className="min-h-0 flex-1 overflow-y-auto">
             <MessageList messages={messages} />
           </div>
-          <Composer />
+          <Composer conversationId={conversationId} />
         </>
       )}
     </div>

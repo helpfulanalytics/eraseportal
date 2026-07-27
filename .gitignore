@@ -45,3 +45,6 @@ next-env.d.ts
 # firebase
 firebase-debug.log*
 .firebase/
+
+# local firestore backups from `npm run reset`
+backups/

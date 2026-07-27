@@ -14,7 +14,7 @@
  * key. `one()` and `many()` put it back.
  */
 import { FieldValue } from "firebase-admin/firestore";
-import { adminDb } from "./firebase/admin";
+import { adminAuth, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
 import type {
   Board,
@@ -320,7 +320,72 @@ export async function getCurrentUser(): Promise<Person | null> {
     }
   }
 
-  return null;
+  // Authenticated, but nobody in the workspace corresponds to them — which is
+  // every account created through /sign-up, since that only ever made a
+  // Firebase auth user. Without this, signing up succeeded and then bounced
+  // you straight back to sign-in with no explanation.
+  //
+  // Note what this implies: anyone who can complete the sign-up form gets a
+  // workspace identity. That matches what the sign-up page currently offers.
+  // To make the workspace invite-only, delete this call and seed people ahead
+  // of time — the email-matching branch above is then the only way in.
+  return provisionPerson(session);
+}
+
+/** Avatar tints, matching the palette the seeded people use. */
+const PERSON_COLORS = [
+  "var(--k-purple)",
+  "var(--k-blue)",
+  "var(--k-green-0e)",
+  "var(--k-yellow)",
+  "var(--k-red)",
+];
+
+function initialsFrom(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Create the Person for a freshly authenticated account.
+ *
+ * The document id is the auth uid rather than a hand-picked slug like
+ * `tosin`: seeded people keep their readable ids, and anyone who signs up
+ * gets a collision-free one for free.
+ */
+async function provisionPerson(session: {
+  uid: string;
+  email: string | undefined;
+}): Promise<Person> {
+  const authUser = await adminAuth().getUser(session.uid);
+  const email = session.email ?? authUser.email ?? "";
+  const name = authUser.displayName?.trim() || email.split("@")[0] || "Member";
+
+  // Deterministic so the same person keeps the same tint across re-provisions.
+  const tint =
+    PERSON_COLORS[
+      Math.abs(
+        [...session.uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0),
+      ) % PERSON_COLORS.length
+    ];
+
+  const person: Person = {
+    id: session.uid,
+    name,
+    handle: (email.split("@")[0] || name).toLowerCase(),
+    email,
+    initials: initialsFrom(name),
+    color: tint,
+    kind: "member",
+    uid: session.uid,
+  };
+
+  const { id, ...rest } = person;
+  await adminDb().collection(COLLECTIONS.people).doc(id).set(rest, { merge: true });
+
+  return person;
 }
 
 /* ---- writes ---------------------------------------------------------- */

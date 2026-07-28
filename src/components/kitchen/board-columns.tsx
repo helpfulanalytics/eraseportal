@@ -19,6 +19,7 @@ import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -209,12 +210,14 @@ function Card({
         <DropdownMenuContent align="end" className="w-48">
           {otherColumns.length > 0 ? (
             <>
-              <DropdownMenuLabel>Move to</DropdownMenuLabel>
-              {otherColumns.map((col) => (
-                <DropdownMenuItem key={col.id} onClick={() => move(col.id)}>
-                  {col.name}
-                </DropdownMenuItem>
-              ))}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Move to</DropdownMenuLabel>
+                {otherColumns.map((col) => (
+                  <DropdownMenuItem key={col.id} onClick={() => move(col.id)}>
+                    {col.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
             </>
           ) : null}

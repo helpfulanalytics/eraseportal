@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/components/workspace-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -52,14 +53,16 @@ export function UserMenu() {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="truncate font-medium text-k-black-84">
-            {currentUser.name}
-          </span>
-          <span className="truncate font-normal text-k-black-40 text-xs">
-            {currentUser.email}
-          </span>
-        </DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex flex-col gap-0.5">
+            <span className="truncate font-medium text-k-black-84">
+              {currentUser.name}
+            </span>
+            <span className="truncate font-normal text-k-black-40 text-xs">
+              {currentUser.email}
+            </span>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
 

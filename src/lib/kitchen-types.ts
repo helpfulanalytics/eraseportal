@@ -265,4 +265,5 @@ export interface NavFolder {
   id: string;
   name: string;
   conversations: Array<{ id: string; name: string }>;
+  boards: Array<{ id: string; name: string }>;
 }

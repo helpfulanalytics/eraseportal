@@ -13,15 +13,19 @@
 import { revalidatePath } from "next/cache";
 import {
   createBoard,
+  createCard,
   createClient,
   createConversation,
   createDocument,
   createEmbed,
   createFolder,
+  deleteCard,
   getCurrentUser,
+  moveCard,
   sendMessage,
   setTaskCompleted,
   setWorkspaceName,
+  updateCard,
 } from "@/lib/kitchen-data";
 import type { FolderAccess } from "@/lib/kitchen-types";
 
@@ -212,4 +216,69 @@ function normaliseUrl(raw: string): string | null {
   } catch {
     return null;
   }
+}
+
+/* ---- board cards -------------------------------------------------------- */
+
+export async function createCardAction(input: {
+  boardId: string;
+  columnId: string;
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  dueDate?: string;
+  labels?: string[];
+}): Promise<void> {
+  await requireUser();
+
+  const title = input.title.trim();
+  if (!title) throw new Error("A card needs a title.");
+
+  await createCard({
+    ...input,
+    title,
+    description: input.description?.trim() || undefined,
+  });
+  revalidatePath(`/boards/${input.boardId}`);
+}
+
+export async function updateCardAction(input: {
+  boardId: string;
+  cardId: string;
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  dueDate?: string;
+  labels?: string[];
+}): Promise<void> {
+  await requireUser();
+
+  const title = input.title.trim();
+  if (!title) throw new Error("A card needs a title.");
+
+  await updateCard({
+    ...input,
+    title,
+    description: input.description?.trim() || undefined,
+  });
+  revalidatePath(`/boards/${input.boardId}`);
+}
+
+export async function moveCardAction(
+  boardId: string,
+  cardId: string,
+  toColumnId: string,
+): Promise<void> {
+  await requireUser();
+  await moveCard({ boardId, cardId, toColumnId });
+  revalidatePath(`/boards/${boardId}`);
+}
+
+export async function deleteCardAction(
+  boardId: string,
+  cardId: string,
+): Promise<void> {
+  await requireUser();
+  await deleteCard({ boardId, cardId });
+  revalidatePath(`/boards/${boardId}`);
 }

@@ -4,6 +4,7 @@ import {
   ArchiveIcon,
   CircleCheckIcon,
   FolderIcon,
+  LayoutTemplateIcon,
   MessageSquareIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -71,7 +72,22 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
       <ul className="flex flex-col gap-px px-2 pb-4">
         {folders.map((folder) => {
           const href = `/folders/${folder.id}`;
-          const children = folder.conversations;
+          // Boards first, then conversations — arbitrary but stable, so the
+          // tree doesn't reshuffle itself as items are created.
+          const children = [
+            ...folder.boards.map((b) => ({
+              key: `board:${b.id}`,
+              href: `/boards/${b.id}`,
+              name: b.name,
+              icon: LayoutTemplateIcon,
+            })),
+            ...folder.conversations.map((c) => ({
+              key: `conv:${c.id}`,
+              href: `/conversations/${c.id}`,
+              name: c.name,
+              icon: MessageSquareIcon,
+            })),
+          ];
           return (
             <li key={folder.id}>
               <SidebarRow href={href} active={pathname === href}>
@@ -84,24 +100,21 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
 
               {children.length > 0 ? (
                 <ul className="flex flex-col gap-px">
-                  {children.map((conv) => {
-                    const convHref = `/conversations/${conv.id}`;
-                    return (
-                      <li key={conv.id}>
-                        <SidebarRow
-                          href={convHref}
-                          active={pathname === convHref}
-                          className="pl-7"
-                        >
-                          <MessageSquareIcon
-                            className="size-4 shrink-0 text-k-black-56"
-                            strokeWidth={1.6}
-                          />
-                          <span className="truncate">{conv.name}</span>
-                        </SidebarRow>
-                      </li>
-                    );
-                  })}
+                  {children.map((child) => (
+                    <li key={child.key}>
+                      <SidebarRow
+                        href={child.href}
+                        active={pathname === child.href}
+                        className="pl-7"
+                      >
+                        <child.icon
+                          className="size-4 shrink-0 text-k-black-56"
+                          strokeWidth={1.6}
+                        />
+                        <span className="truncate">{child.name}</span>
+                      </SidebarRow>
+                    </li>
+                  ))}
                 </ul>
               ) : null}
             </li>

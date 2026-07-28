@@ -13,12 +13,15 @@
  * Document shape is the domain type minus `id`, which lives in the document
  * key. `one()` and `many()` put it back.
  */
+import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
 import type {
   Block,
   Board,
+  BoardCard,
+  BoardColumn,
   Company,
   Conversation,
   ConversationFile,
@@ -285,14 +288,24 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
 export async function getNavTree(): Promise<NavFolder[]> {
   const folders = await getFolders();
   return Promise.all(
-    folders.map(async (folder) => ({
-      id: folder.id,
-      name: folder.name,
-      conversations: (await getConversationsInFolder(folder.id)).map((c) => ({
-        id: c.id,
-        name: c.name,
-      })),
-    })),
+    folders.map(async (folder) => {
+      const [conversations, boards] = await Promise.all([
+        getConversationsInFolder(folder.id),
+        getBoardsInFolder(folder.id),
+      ]);
+      return {
+        id: folder.id,
+        name: folder.name,
+        conversations: conversations.map((c) => ({ id: c.id, name: c.name })),
+        boards: boards.map((b) => ({ id: b.id, name: b.name })),
+      };
+    }),
+  );
+}
+
+export async function getBoardsInFolder(folderId: string): Promise<Board[]> {
+  return many<Board>(
+    collection(COLLECTIONS.boards).where("folderId", "==", folderId),
   );
 }
 
@@ -780,4 +793,142 @@ export async function createClient(input: {
 
   await doc.set(withoutId(person));
   return person;
+}
+
+/* ---- board cards ------------------------------------------------------- */
+
+/**
+ * Cards live nested two levels deep — `Board.columns[i].cards[j]` — so there's
+ * no Firestore field path that can address one directly. `arrayUnion` only
+ * reaches a top-level array field; `columns` itself is one, but the cards
+ * array inside a specific column element is not addressable at all once it's
+ * nested inside that outer array.
+ *
+ * So every card mutation is read-modify-write: fetch the board, transform the
+ * in-memory `columns` array, write the whole array back with a single field
+ * update. That's a real race if two people edit the same board at once — this
+ * app has no realtime sync yet, so it's the same risk every read-then-write
+ * flow here already carries, not a new one.
+ */
+async function mutateBoardColumns(
+  boardId: string,
+  mutate: (columns: BoardColumn[]) => BoardColumn[],
+): Promise<void> {
+  const ref = adminDb().collection(COLLECTIONS.boards).doc(boardId);
+  const doc = await ref.get();
+  if (!doc.exists) throw new Error("Board not found.");
+
+  const board = hydrate<Board>(doc);
+  await ref.update({ columns: mutate(board.columns) });
+}
+
+/** Keeps the folder item's card count in step with the board's actual cards. */
+async function bumpBoardCardCount(boardId: string, delta: number): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.items)
+    .doc(boardId)
+    .set(
+      { meta: { type: "board", cardCount: FieldValue.increment(delta) } },
+      { merge: true },
+    );
+}
+
+export async function createCard(input: {
+  boardId: string;
+  columnId: string;
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  dueDate?: string;
+  labels?: string[];
+}): Promise<BoardCard> {
+  const card: BoardCard = {
+    id: randomUUID(),
+    title: input.title,
+    ...(input.description ? { description: input.description } : {}),
+    ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
+    ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+    ...(input.labels?.length ? { labels: input.labels } : {}),
+  };
+
+  await mutateBoardColumns(input.boardId, (columns) =>
+    columns.map((col) =>
+      col.id === input.columnId
+        ? { ...col, cards: [...col.cards, card] }
+        : col,
+    ),
+  );
+  await bumpBoardCardCount(input.boardId, 1);
+
+  return card;
+}
+
+/**
+ * Full replace, not a patch: every field the form collects is rewritten, so
+ * clearing a field (removing the due date, say) works by omitting it rather
+ * than needing a separate "delete this field" signal.
+ */
+export async function updateCard(input: {
+  boardId: string;
+  cardId: string;
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  dueDate?: string;
+  labels?: string[];
+}): Promise<void> {
+  await mutateBoardColumns(input.boardId, (columns) =>
+    columns.map((col) => ({
+      ...col,
+      cards: col.cards.map((c): BoardCard =>
+        c.id !== input.cardId
+          ? c
+          : {
+              id: c.id,
+              title: input.title,
+              ...(input.description ? { description: input.description } : {}),
+              ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
+              ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+              ...(input.labels?.length ? { labels: input.labels } : {}),
+            },
+      ),
+    })),
+  );
+}
+
+export async function moveCard(input: {
+  boardId: string;
+  cardId: string;
+  toColumnId: string;
+}): Promise<void> {
+  await mutateBoardColumns(input.boardId, (columns) => {
+    let moved: BoardCard | undefined;
+    const withoutCard = columns.map((col) => {
+      const found = col.cards.find((c) => c.id === input.cardId);
+      if (!found) return col;
+      moved = found;
+      return { ...col, cards: col.cards.filter((c) => c.id !== input.cardId) };
+    });
+    if (!moved) return columns; // already gone — nothing to move
+
+    const card = moved;
+    return withoutCard.map((col) =>
+      col.id === input.toColumnId
+        ? { ...col, cards: [...col.cards, card] }
+        : col,
+    );
+  });
+}
+
+export async function deleteCard(input: {
+  boardId: string;
+  cardId: string;
+}): Promise<void> {
+  await mutateBoardColumns(input.boardId, (columns) =>
+    columns.map((col) => ({
+      ...col,
+      cards: col.cards.filter((c) => c.id !== input.cardId),
+    })),
+  );
+  await bumpBoardCardCount(input.boardId, -1);
 }

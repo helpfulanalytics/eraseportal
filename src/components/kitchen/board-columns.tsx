@@ -40,8 +40,19 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
-import { deleteCardAction, moveCardAction } from "@/app/(workspace)/actions";
+import {
+  CalendarIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  XIcon,
+} from "lucide-react";
+import {
+  addBoardColumnAction,
+  deleteBoardColumnAction,
+  deleteCardAction,
+  moveCardAction,
+  renameBoardColumnAction,
+} from "@/app/(workspace)/actions";
 import { CardDialog } from "@/components/kitchen/card-dialog";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import {
@@ -227,6 +238,43 @@ export function BoardColumns({
     dragStartSnapshot.current = null;
   };
 
+  // Rename/delete are optimistic-with-revert, matching every other mutation
+  // in this file. Add is not: there's no client-known id for a column that
+  // doesn't exist yet, and it's a rare enough action that waiting the ~200ms
+  // for the server's real id back is unnoticeable — AddColumnForm awaits this
+  // directly and manages its own pending/error state, the same way
+  // CardDialog's save() does.
+  const renameColumn = (columnId: string, name: string) => {
+    const previous = columns;
+    setColumns((prev) =>
+      prev.map((c) => (c.id === columnId ? { ...c, name } : c)),
+    );
+    startTransition(async () => {
+      try {
+        await renameBoardColumnAction(boardId, columnId, name);
+      } catch {
+        setColumns(previous);
+      }
+    });
+  };
+
+  const deleteColumn = (columnId: string) => {
+    const previous = columns;
+    setColumns((prev) => prev.filter((c) => c.id !== columnId));
+    startTransition(async () => {
+      try {
+        await deleteBoardColumnAction(boardId, columnId);
+      } catch {
+        setColumns(previous);
+      }
+    });
+  };
+
+  const addColumn = async (name: string) => {
+    const column = await addBoardColumnAction(boardId, name);
+    setColumns((prev) => [...prev, { ...column, cards: [] }]);
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -248,8 +296,11 @@ export function BoardColumns({
               onEditCard={(card) =>
                 setDraft({ mode: "edit", columnId: column.id, card })
               }
+              onRename={(name) => renameColumn(column.id, name)}
+              onDelete={() => deleteColumn(column.id)}
             />
           ))}
+          <AddColumnForm onAdd={addColumn} />
         </div>
 
         {draft ? (
@@ -280,22 +331,45 @@ function Column({
   allColumns,
   onAddCard,
   onEditCard,
+  onRename,
+  onDelete,
 }: {
   column: BoardColumn;
   boardId: string;
   allColumns: BoardColumn[];
   onAddCard: () => void;
   onEditCard: (card: BoardCard) => void;
+  onRename: (name: string) => void;
+  onDelete: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const cardIds = column.cards.map((c) => c.id);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(column.name);
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setName(column.name); // an empty list name isn't a valid state to leave
+      return;
+    }
+    if (trimmed !== column.name) onRename(trimmed);
+  };
+
+  const remove = () => {
+    const warning = column.cards.length
+      ? `Delete "${column.name}" and its ${column.cards.length} card${column.cards.length === 1 ? "" : "s"}? This can't be undone.`
+      : `Delete "${column.name}"?`;
+    if (window.confirm(warning)) onDelete();
+  };
 
   return (
     <section
       className="flex w-72 flex-col rounded-xl bg-k-black-03-solid"
       aria-label={column.name}
     >
-      <header className="flex items-center gap-2 px-3 pt-3 pb-2">
+      <header className="group/header flex items-center gap-2 px-3 pt-3 pb-2">
         <span
           className={cn(
             "size-2 shrink-0 rounded-full",
@@ -303,16 +377,63 @@ function Column({
           )}
           aria-hidden="true"
         />
-        <h2 className="font-medium text-k-black-84 text-md">{column.name}</h2>
+
+        {editing ? (
+          <input
+            autoFocus
+            value={name}
+            aria-label="List name"
+            onChange={(e) => setName(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
+              if (e.key === "Escape") {
+                setName(column.name);
+                setEditing(false);
+              }
+            }}
+            className="min-w-0 flex-1 rounded-md border border-k-blue bg-background px-1 py-0.5 font-medium text-k-black-84 text-md outline-none ring-2 ring-k-blue-08"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="-mx-1 min-w-0 truncate rounded-md px-1 py-0.5 text-left font-medium text-k-black-84 text-md transition-colors hover:bg-k-black-06"
+          >
+            {name}
+          </button>
+        )}
+
         <span className="text-k-black-40 text-md">{column.cards.length}</span>
+
         <button
           type="button"
           aria-label={`Add card to ${column.name}`}
           onClick={onAddCard}
-          className="ml-auto flex size-6 items-center justify-center rounded-md text-k-black-36 transition-colors hover:bg-k-black-06 hover:text-k-black-84"
+          className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-md text-k-black-36 transition-colors hover:bg-k-black-06 hover:text-k-black-84"
         >
           <PlusIcon className="size-4" strokeWidth={1.7} />
         </button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="List options"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-k-black-36 opacity-0 transition-opacity hover:bg-k-black-06 hover:text-k-black-84 focus-visible:opacity-100 group-hover/header:opacity-100"
+          >
+            <MoreHorizontalIcon className="size-4" strokeWidth={1.7} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => setEditing(true)}>
+              Rename list
+            </DropdownMenuItem>
+            <DropdownMenuItem variant="destructive" onClick={remove}>
+              Delete list
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
 
       <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
@@ -505,5 +626,91 @@ function CardBody({ card }: { card: BoardCard }) {
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The trailing "+ Add another list" slot at the end of the board — a ghost
+ * column the same width as a real one, so it lines up rather than looking
+ * like an unrelated button bolted onto the row.
+ */
+function AddColumnForm({ onAdd }: { onAdd: (name: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const close = () => {
+    setOpen(false);
+    setName("");
+    setError(null);
+  };
+
+  const submit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      await onAdd(trimmed);
+      close();
+    } catch (cause) {
+      setPending(false);
+      setError(cause instanceof Error ? cause.message : "Couldn't add that list.");
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex h-10 w-72 shrink-0 items-center gap-1.5 rounded-xl px-3 text-k-black-56 text-md transition-colors hover:bg-k-black-04 hover:text-k-black-84"
+      >
+        <PlusIcon className="size-4" strokeWidth={1.7} />
+        Add another list
+      </button>
+    );
+  }
+
+  return (
+    <div className="w-72 shrink-0 rounded-xl bg-k-black-03-solid p-2">
+      <input
+        autoFocus
+        value={name}
+        disabled={pending}
+        placeholder="List name"
+        aria-label="List name"
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void submit();
+          }
+          if (e.key === "Escape") close();
+        }}
+        className="h-9 w-full rounded-lg border border-k-black-12 bg-background px-2.5 text-k-black-84 text-md outline-none placeholder:text-k-gray-ad focus:border-k-blue disabled:opacity-60"
+      />
+      {error ? <p role="alert" className="mt-1 text-k-red text-sm">{error}</p> : null}
+      <div className="mt-2 flex items-center gap-1">
+        <button
+          type="button"
+          disabled={!name.trim() || pending}
+          onClick={() => void submit()}
+          className="flex h-8 items-center rounded-lg bg-k-blue px-3 font-medium text-k-white text-md transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {pending ? "Adding…" : "Add list"}
+        </button>
+        <button
+          type="button"
+          aria-label="Cancel"
+          disabled={pending}
+          onClick={close}
+          className="flex size-8 items-center justify-center rounded-md text-k-black-40 transition-colors hover:bg-k-black-06 hover:text-k-black-84 disabled:opacity-60"
+        >
+          <XIcon className="size-4" strokeWidth={1.8} />
+        </button>
+      </div>
+    </div>
   );
 }

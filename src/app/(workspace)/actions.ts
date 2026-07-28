@@ -12,6 +12,7 @@
  */
 import { revalidatePath } from "next/cache";
 import {
+  addBoardColumn,
   addCardComment,
   createBoard,
   createCard,
@@ -20,12 +21,19 @@ import {
   createDocument,
   createEmbed,
   createFolder,
+  deleteConversation,
   deleteBoard,
+  deleteBoardColumn,
   deleteCard,
+  deleteFolder,
   getCurrentUser,
   moveCard,
   renameBoard,
+  renameBoardColumn,
+  renameConversation,
+  renameFolder,
   sendMessage,
+  setBoardColor,
   setTaskCompleted,
   setWorkspaceName,
   updateCard,
@@ -323,6 +331,97 @@ export async function renameBoardAction(
 export async function deleteBoardAction(boardId: string, folderId: string): Promise<void> {
   await requireUser();
   await deleteBoard(boardId);
+  revalidatePath(`/folders/${folderId}`);
+  revalidatePath("/", "layout");
+}
+
+export async function setBoardColorAction(
+  boardId: string,
+  folderId: string,
+  color: string,
+): Promise<void> {
+  await requireUser();
+  await setBoardColor(boardId, color);
+  revalidatePath(`/boards/${boardId}`);
+  revalidatePath("/", "layout"); // the sidebar tints board rows by colour
+}
+
+/* ---- board columns -------------------------------------------------------- */
+
+export async function renameBoardColumnAction(
+  boardId: string,
+  columnId: string,
+  name: string,
+): Promise<void> {
+  await requireUser();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A list needs a name.");
+
+  await renameBoardColumn(boardId, columnId, trimmed);
+  revalidatePath(`/boards/${boardId}`);
+}
+
+export async function addBoardColumnAction(
+  boardId: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  await requireUser();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A list needs a name.");
+
+  const column = await addBoardColumn(boardId, trimmed);
+  revalidatePath(`/boards/${boardId}`);
+  return { id: column.id, name: column.name };
+}
+
+export async function deleteBoardColumnAction(
+  boardId: string,
+  columnId: string,
+): Promise<void> {
+  await requireUser();
+  await deleteBoardColumn(boardId, columnId);
+  revalidatePath(`/boards/${boardId}`);
+}
+
+/* ---- folder / conversation rename & delete -------------------------------- */
+
+export async function renameFolderAction(folderId: string, name: string): Promise<void> {
+  await requireUser();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A folder needs a name.");
+
+  await renameFolder(folderId, trimmed);
+  revalidatePath(`/folders/${folderId}`);
+  revalidatePath("/", "layout");
+}
+
+export async function deleteFolderAction(folderId: string): Promise<void> {
+  await requireUser();
+  await deleteFolder(folderId);
+  revalidatePath("/", "layout");
+}
+
+export async function renameConversationAction(
+  conversationId: string,
+  folderId: string,
+  name: string,
+): Promise<void> {
+  await requireUser();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A conversation needs a name.");
+
+  await renameConversation(conversationId, trimmed);
+  revalidatePath(`/conversations/${conversationId}`);
+  revalidatePath(`/folders/${folderId}`);
+  revalidatePath("/", "layout");
+}
+
+export async function deleteConversationAction(
+  conversationId: string,
+  folderId: string,
+): Promise<void> {
+  await requireUser();
+  await deleteConversation(conversationId);
   revalidatePath(`/folders/${folderId}`);
   revalidatePath("/", "layout");
 }

@@ -80,12 +80,14 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
               href: `/boards/${b.id}`,
               name: b.name,
               icon: LayoutTemplateIcon,
+              color: b.color,
             })),
             ...folder.conversations.map((c) => ({
               key: `conv:${c.id}`,
               href: `/conversations/${c.id}`,
               name: c.name,
               icon: MessageSquareIcon,
+              color: undefined as string | undefined,
             })),
           ];
           return (
@@ -108,7 +110,11 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
                         className="pl-7"
                       >
                         <child.icon
-                          className="size-4 shrink-0 text-k-black-56"
+                          className={cn(
+                            "size-4 shrink-0",
+                            !child.color && "text-k-black-56",
+                          )}
+                          style={child.color ? { color: child.color } : undefined}
                           strokeWidth={1.6}
                         />
                         <span className="truncate">{child.name}</span>

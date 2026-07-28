@@ -1,12 +1,8 @@
-import {
-  ListFilterIcon,
-  MessageSquareIcon,
-  MoreHorizontalIcon,
-  StarIcon,
-} from "lucide-react";
+import { ListFilterIcon, MessageSquareIcon, StarIcon } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Composer } from "@/components/conversation/composer";
 import { MessageList } from "@/components/conversation/message-list";
+import { ConversationHeaderControls } from "@/components/kitchen/conversation-header-controls";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { FileThumb } from "@/components/kitchen/file-thumb";
 import { SubTabs } from "@/components/kitchen/page-title";
@@ -46,9 +42,11 @@ export default async function ConversationPage({
             className="size-[18px] shrink-0 text-k-black-56"
             strokeWidth={1.6}
           />
-          <h1 className="min-w-0 truncate font-medium text-k-black-84 text-section">
-            {conversation.name}
-          </h1>
+          <ConversationHeaderControls
+            conversationId={conversationId}
+            folderId={conversation.folderId}
+            name={conversation.name}
+          />
           <button
             type="button"
             aria-label="Favourite"
@@ -64,13 +62,6 @@ export default async function ConversationPage({
               className="flex size-7 items-center justify-center rounded-md text-k-black-56 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
             >
               <ListFilterIcon className="size-4" strokeWidth={1.6} />
-            </button>
-            <button
-              type="button"
-              aria-label="More"
-              className="flex size-7 items-center justify-center rounded-md text-k-black-56 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
-            >
-              <MoreHorizontalIcon className="size-4" strokeWidth={1.6} />
             </button>
             <AvatarStack personIds={conversation.participantIds} />
             <ShareDialog title={conversation.name} />

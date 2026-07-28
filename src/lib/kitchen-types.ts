@@ -194,6 +194,8 @@ export interface Board {
   name: string;
   folderId: string;
   columns: BoardColumn[];
+  /** One of `BOARD_COLORS` in kitchen-format.ts. Absent on older boards. */
+  color?: string;
 }
 
 export interface KDocument {
@@ -276,5 +278,5 @@ export interface NavFolder {
   id: string;
   name: string;
   conversations: Array<{ id: string; name: string }>;
-  boards: Array<{ id: string; name: string }>;
+  boards: Array<{ id: string; name: string; color?: string }>;
 }

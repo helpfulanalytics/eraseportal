@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
+import { BOARD_COLORS } from "./kitchen-format";
 import type {
   Block,
   Board,
@@ -298,7 +299,7 @@ export async function getNavTree(): Promise<NavFolder[]> {
         id: folder.id,
         name: folder.name,
         conversations: conversations.map((c) => ({ id: c.id, name: c.name })),
-        boards: boards.map((b) => ({ id: b.id, name: b.name })),
+        boards: boards.map((b) => ({ id: b.id, name: b.name, color: b.color })),
       };
     }),
   );
@@ -515,6 +516,36 @@ export async function createFolder(input: {
 }
 
 /**
+ * A folder's name has one copy, unlike a board's or a conversation's — the
+ * sidebar and the folder listing both read `folders/{id}.name` directly,
+ * nothing duplicates it onto an `items` row (a folder isn't itself an item
+ * of another folder).
+ */
+export async function renameFolder(folderId: string, name: string): Promise<void> {
+  await adminDb().collection(COLLECTIONS.folders).doc(folderId).update({ name });
+}
+
+/**
+ * Deletes a folder only if it's empty. A folder's contents span five
+ * collections (conversations, boards, documents, embeds, files) each with
+ * their own nested state — messages under a conversation, cards under a
+ * board — and cascading all of that safely in one operation is a
+ * meaningfully bigger, riskier piece of work than anything else in this
+ * file. Requiring "empty it first" keeps deletion honest about what it
+ * actually does, rather than silently destroying everything beneath it.
+ */
+export async function deleteFolder(folderId: string): Promise<void> {
+  const folder = await getFolder(folderId);
+  if (!folder) return;
+  if (folder.itemIds.length > 0) {
+    throw new Error(
+      `This folder still has ${folder.itemIds.length} item(s) in it. Move or delete them first.`,
+    );
+  }
+  await adminDb().collection(COLLECTIONS.folders).doc(folderId).delete();
+}
+
+/**
  * A conversation is three writes, not one: the conversation itself, the
  * `items` row that makes it show up in the folder listing, and the id appended
  * to the folder's `itemIds` (which is what `getFolderItems` orders by). Miss
@@ -554,6 +585,55 @@ export async function createConversation(input: {
   await batch.commit();
 
   return conversation;
+}
+
+/**
+ * Same dual-write as `renameBoard`: a conversation's name lives on the
+ * conversation document and again on its `items` row, and both have to
+ * agree or the sidebar and the folder listing show a different name than
+ * the conversation page itself.
+ */
+export async function renameConversation(
+  conversationId: string,
+  name: string,
+): Promise<void> {
+  const db = adminDb();
+  const batch = db.batch();
+  batch.update(db.collection(COLLECTIONS.conversations).doc(conversationId), { name });
+  batch.update(db.collection(COLLECTIONS.items).doc(conversationId), { name });
+  await batch.commit();
+}
+
+/**
+ * Deletes a conversation, every message in it, and its folder reference.
+ * Messages aren't paginated here — batched deletes in groups of 500, which
+ * is Firestore's own cap per batch — because this app has no conversation
+ * anywhere close to that size; the moment one does, this is the function to
+ * revisit.
+ */
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const conversation = await getConversation(conversationId);
+  if (!conversation) return;
+
+  const db = adminDb();
+  const messages = await db
+    .collection(COLLECTIONS.messages)
+    .where("conversationId", "==", conversationId)
+    .get();
+
+  for (let i = 0; i < messages.docs.length; i += 500) {
+    const batch = db.batch();
+    for (const doc of messages.docs.slice(i, i + 500)) batch.delete(doc.ref);
+    await batch.commit();
+  }
+
+  const batch = db.batch();
+  batch.delete(db.collection(COLLECTIONS.conversations).doc(conversationId));
+  unlinkItemFromFolder(batch, {
+    id: conversationId,
+    folderId: conversation.folderId,
+  });
+  await batch.commit();
 }
 
 /**
@@ -680,6 +760,7 @@ export async function createBoard(input: {
   folderId: string;
   name: string;
   authorId: string;
+  color?: string;
 }): Promise<Board> {
   const db = adminDb();
   const doc = db.collection(COLLECTIONS.boards).doc();
@@ -689,6 +770,7 @@ export async function createBoard(input: {
     name: input.name,
     folderId: input.folderId,
     columns: DEFAULT_BOARD_COLUMNS.map((c) => ({ ...c, cards: [] })),
+    color: input.color ?? BOARD_COLORS[0],
   };
 
   const batch = db.batch();
@@ -718,6 +800,14 @@ export async function renameBoard(boardId: string, name: string): Promise<void> 
   batch.update(db.collection(COLLECTIONS.boards).doc(boardId), { name });
   batch.update(db.collection(COLLECTIONS.items).doc(boardId), { name });
   await batch.commit();
+}
+
+/**
+ * Colour lives only on the board document — unlike the name, it isn't shown
+ * on the folder listing row, so there's no second copy to keep in sync.
+ */
+export async function setBoardColor(boardId: string, color: string): Promise<void> {
+  await adminDb().collection(COLLECTIONS.boards).doc(boardId).update({ color });
 }
 
 export async function deleteBoard(boardId: string): Promise<void> {
@@ -852,16 +942,23 @@ export async function createClient(input: {
  * app has no realtime sync yet, so it's the same risk every read-then-write
  * flow here already carries, not a new one.
  */
+/**
+ * Returns the columns as they were *before* the mutation, not after — a
+ * caller that needs to know what was removed (deleting a column full of
+ * cards needs its card count to adjust `bumpBoardCardCount`) can diff
+ * against this without a second read.
+ */
 async function mutateBoardColumns(
   boardId: string,
   mutate: (columns: BoardColumn[]) => BoardColumn[],
-): Promise<void> {
+): Promise<BoardColumn[]> {
   const ref = adminDb().collection(COLLECTIONS.boards).doc(boardId);
   const doc = await ref.get();
   if (!doc.exists) throw new Error("Board not found.");
 
   const board = hydrate<Board>(doc);
   await ref.update({ columns: mutate(board.columns) });
+  return board.columns;
 }
 
 /** Keeps the folder item's card count in step with the board's actual cards. */
@@ -1028,4 +1125,46 @@ export async function deleteCard(input: {
     })),
   );
   await bumpBoardCardCount(input.boardId, -1);
+}
+
+/* ---- board columns ------------------------------------------------------ */
+
+export async function renameBoardColumn(
+  boardId: string,
+  columnId: string,
+  name: string,
+): Promise<void> {
+  await mutateBoardColumns(boardId, (columns) =>
+    columns.map((col) => (col.id === columnId ? { ...col, name } : col)),
+  );
+}
+
+export async function addBoardColumn(
+  boardId: string,
+  name: string,
+): Promise<BoardColumn> {
+  const column: BoardColumn = { id: randomUUID(), name, cards: [] };
+  await mutateBoardColumns(boardId, (columns) => [...columns, column]);
+  return column;
+}
+
+/**
+ * Deleting a column takes its cards with it — there's no "move these
+ * somewhere first" step, matching how deleting a card itself works. The
+ * caller is expected to have confirmed that with whoever clicked delete;
+ * this just needs to keep the board's card count honest afterwards, since
+ * `bumpBoardCardCount` has no way to know a whole column's worth of cards
+ * just vanished otherwise.
+ */
+export async function deleteBoardColumn(
+  boardId: string,
+  columnId: string,
+): Promise<void> {
+  const previous = await mutateBoardColumns(boardId, (columns) =>
+    columns.filter((col) => col.id !== columnId),
+  );
+  const removed = previous.find((col) => col.id === columnId);
+  if (removed?.cards.length) {
+    await bumpBoardCardCount(boardId, -removed.cards.length);
+  }
 }

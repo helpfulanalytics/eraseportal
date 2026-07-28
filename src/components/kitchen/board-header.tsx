@@ -14,36 +14,62 @@
  */
 import { useRef, useState, useTransition } from "react";
 import {
+  CheckIcon,
   LayoutTemplateIcon,
   MoreHorizontalIcon,
   PencilIcon,
   StarIcon,
   TrashIcon,
 } from "lucide-react";
-import { deleteBoardAction, renameBoardAction } from "@/app/(workspace)/actions";
+import {
+  deleteBoardAction,
+  renameBoardAction,
+  setBoardColorAction,
+} from "@/app/(workspace)/actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { BOARD_COLORS } from "@/lib/kitchen-format";
 import { cn } from "@/lib/utils";
 
 export function BoardHeader({
   boardId,
   folderId,
   name,
+  color,
 }: {
   boardId: string;
   folderId: string;
   name: string;
+  color?: string;
 }) {
   const [title, setTitle] = useState(name);
   const [editing, setEditing] = useState(false);
+  const [boardColor, setBoardColor] = useState(color ?? BOARD_COLORS[0]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deleting, startDelete] = useTransition();
+  const [recoloring, startRecolor] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const pickColor = (next: string) => {
+    if (next === boardColor) return;
+    const previous = boardColor;
+    setBoardColor(next);
+    startRecolor(async () => {
+      try {
+        await setBoardColorAction(boardId, folderId, next);
+      } catch {
+        setBoardColor(previous);
+      }
+    });
+  };
 
   const commit = () => {
     setEditing(false);
@@ -91,7 +117,8 @@ export function BoardHeader({
     <div className="shrink-0 px-5 pb-4">
       <div className="flex items-center gap-2">
         <LayoutTemplateIcon
-          className="size-[18px] shrink-0 text-k-black-56"
+          className="size-[18px] shrink-0"
+          style={{ color: boardColor }}
           strokeWidth={1.6}
         />
 
@@ -158,6 +185,32 @@ export function BoardHeader({
               <PencilIcon className="size-3.5" strokeWidth={1.8} />
               Rename
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Colour</DropdownMenuLabel>
+              {/* Plain buttons, not DropdownMenuItem — selecting one shouldn't
+                  close the menu, since picking a colour is quick to redo if
+                  the wrong swatch gets hit. */}
+              <div className="flex items-center gap-1.5 px-1.5 py-1">
+                {BOARD_COLORS.map((swatch) => (
+                  <button
+                    key={swatch}
+                    type="button"
+                    disabled={recoloring}
+                    aria-label={`Set board colour`}
+                    aria-pressed={swatch === boardColor}
+                    onClick={() => pickColor(swatch)}
+                    style={{ backgroundColor: swatch }}
+                    className="flex size-6 items-center justify-center rounded-full ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-k-black-16 disabled:opacity-60"
+                  >
+                    {swatch === boardColor ? (
+                      <CheckIcon className="size-3.5 text-k-white" strokeWidth={2.5} />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
               disabled={deleting}

@@ -30,7 +30,12 @@ export default async function BoardPage({
         shareTitle={board.name}
       />
 
-      <BoardHeader boardId={board.id} folderId={board.folderId} name={board.name} />
+      <BoardHeader
+        boardId={board.id}
+        folderId={board.folderId}
+        name={board.name}
+        color={board.color}
+      />
 
       <BoardColumns boardId={board.id} columns={board.columns} />
     </div>

@@ -14,6 +14,7 @@ import {
 import { notFound } from "next/navigation";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { FileThumb } from "@/components/kitchen/file-thumb";
+import { FolderHeaderControls } from "@/components/kitchen/folder-header-controls";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
 import { CreateMenu } from "@/components/kitchen/create-menu";
 import { UploadButton } from "@/components/kitchen/upload-button";
@@ -97,9 +98,12 @@ export default async function FolderPage({
             className="size-8 shrink-0 fill-k-yellow text-k-yellow"
             strokeWidth={1.3}
           />
-          <h1 className="font-semibold text-k-black-84 text-title">
-            {folder.name}
-          </h1>
+          <FolderHeaderControls
+            folderId={folderId}
+            name={folder.name}
+            itemCount={folder.itemIds.length}
+            triggerClassName="mt-1.5"
+          />
           <div className="flex items-center gap-0.5 pt-1.5">
             <HeaderIconButton label="Favourite">
               <StarIcon className="size-4" strokeWidth={1.6} />

@@ -12,6 +12,7 @@
  */
 import { revalidatePath } from "next/cache";
 import {
+  addCardComment,
   createBoard,
   createCard,
   createClient,
@@ -229,7 +230,7 @@ export async function createCardAction(input: {
   dueDate?: string;
   labels?: string[];
 }): Promise<void> {
-  await requireUser();
+  const me = await requireUser();
 
   const title = input.title.trim();
   if (!title) throw new Error("A card needs a title.");
@@ -237,6 +238,7 @@ export async function createCardAction(input: {
   await createCard({
     ...input,
     title,
+    authorId: me.id,
     description: input.description?.trim() || undefined,
   });
   revalidatePath(`/boards/${input.boardId}`);
@@ -281,5 +283,19 @@ export async function deleteCardAction(
 ): Promise<void> {
   await requireUser();
   await deleteCard({ boardId, cardId });
+  revalidatePath(`/boards/${boardId}`);
+}
+
+export async function addCardCommentAction(
+  boardId: string,
+  cardId: string,
+  text: string,
+): Promise<void> {
+  const me = await requireUser();
+
+  const trimmed = text.trim();
+  if (!trimmed) return;
+
+  await addCardComment({ boardId, cardId, authorId: me.id, text: trimmed });
   revalidatePath(`/boards/${boardId}`);
 }

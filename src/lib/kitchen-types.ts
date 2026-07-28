@@ -163,6 +163,13 @@ export interface Task {
  * inferred from the "Track projects" description rather than observed. Treat
  * the column/card model as a design decision, not a faithful port.
  */
+export interface BoardCardComment {
+  id: string;
+  authorId: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface BoardCard {
   id: string;
   title: string;
@@ -170,6 +177,10 @@ export interface BoardCard {
   assigneeId?: string;
   dueDate?: string;
   labels?: string[];
+  /** Absent on cards created before authorship was tracked. */
+  authorId?: string;
+  createdAt?: string;
+  comments?: BoardCardComment[];
 }
 
 export interface BoardColumn {

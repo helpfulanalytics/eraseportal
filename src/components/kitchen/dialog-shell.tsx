@@ -24,6 +24,8 @@ import { cn } from "@/lib/utils";
 const SIZE_CLASS = {
   md: "max-w-[440px]",
   lg: "max-w-[600px]",
+  /** The two-pane card detail view — fields on the left, comments on the right. */
+  xl: "max-w-[880px]",
 } as const;
 
 export function DialogShell({
@@ -37,13 +39,17 @@ export function DialogShell({
   canSubmit,
   error,
   leftAction,
+  hideSubmit,
   children,
 }: {
   title: string;
   /** e.g. "in list Sprint" under the title, for the card detail view. */
   subtitle?: React.ReactNode;
-  /** "lg" is the card detail panel; every other dialog stays at "md". */
-  size?: "md" | "lg";
+  /**
+   * "lg" is a new card (no comments yet); "xl" is an existing card's full
+   * detail view. Every other dialog stays at "md".
+   */
+  size?: "md" | "lg" | "xl";
   onClose: () => void;
   onSubmit: () => void;
   submitLabel?: string;
@@ -52,6 +58,12 @@ export function DialogShell({
   error?: string | null;
   /** Rendered at the left of the footer, opposite Save — a Delete button. */
   leftAction?: React.ReactNode;
+  /**
+   * Drop the Save button entirely — for a view where every field already
+   * saves itself the instant it changes, a "Save" button has nothing left to
+   * do. `leftAction` (Delete) still renders.
+   */
+  hideSubmit?: boolean;
   children: React.ReactNode;
 }) {
   useEffect(() => {
@@ -105,17 +117,21 @@ export function DialogShell({
           </p>
         ) : null}
 
-        <div className="flex shrink-0 items-center justify-between gap-3 px-6 pt-4 pb-5">
-          <div>{leftAction}</div>
-          <button
-            type="button"
-            disabled={!canSubmit || pending}
-            onClick={onSubmit}
-            className="flex h-8 items-center rounded-lg bg-k-blue px-4 font-medium text-k-white text-md transition-opacity hover:opacity-90 disabled:opacity-40"
-          >
-            {pending ? "Saving…" : submitLabel}
-          </button>
-        </div>
+        {!hideSubmit || leftAction ? (
+          <div className="flex shrink-0 items-center justify-between gap-3 px-6 pt-4 pb-5">
+            <div>{leftAction}</div>
+            {!hideSubmit ? (
+              <button
+                type="button"
+                disabled={!canSubmit || pending}
+                onClick={onSubmit}
+                className="flex h-8 items-center rounded-lg bg-k-blue px-4 font-medium text-k-white text-md transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {pending ? "Saving…" : submitLabel}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

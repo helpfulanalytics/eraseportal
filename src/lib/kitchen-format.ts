@@ -29,6 +29,26 @@ export function formatShortDate(iso: string): string {
   });
 }
 
+/**
+ * "Feb 18, 2026, 4:45 PM" — comment and activity timestamps.
+ *
+ * Deliberately not UTC, unlike `formatShortDate`. A due date is a bare
+ * calendar date with no real instant behind it, so reading it in UTC avoids
+ * the date shifting by a day in negative-offset timezones. A comment's
+ * `createdAt` is a genuine instant — `new Date().toISOString()` from the
+ * moment it was posted — so showing it in the reader's local time is what's
+ * actually correct here, not an inconsistency with the other formatter.
+ */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 /** "40.7 kB" — matches the metadata line on file rows. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1000) return `${bytes} B`;

@@ -21,6 +21,7 @@ import type {
   Block,
   Board,
   BoardCard,
+  BoardCardComment,
   BoardColumn,
   Company,
   Conversation,
@@ -836,6 +837,7 @@ async function bumpBoardCardCount(boardId: string, delta: number): Promise<void>
 export async function createCard(input: {
   boardId: string;
   columnId: string;
+  authorId: string;
   title: string;
   description?: string;
   assigneeId?: string;
@@ -845,6 +847,8 @@ export async function createCard(input: {
   const card: BoardCard = {
     id: randomUUID(),
     title: input.title,
+    authorId: input.authorId,
+    createdAt: new Date().toISOString(),
     ...(input.description ? { description: input.description } : {}),
     ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
     ...(input.dueDate ? { dueDate: input.dueDate } : {}),
@@ -864,9 +868,13 @@ export async function createCard(input: {
 }
 
 /**
- * Full replace, not a patch: every field the form collects is rewritten, so
- * clearing a field (removing the due date, say) works by omitting it rather
- * than needing a separate "delete this field" signal.
+ * Full replace for the form fields, not a patch — clearing a field (removing
+ * the due date, say) works by omitting it rather than needing a separate
+ * "delete this field" signal. `authorId`, `createdAt` and `comments` are
+ * carried over from the existing card rather than rebuilt, because none of
+ * them are form fields: the edit dialog has no inputs for "who made this" or
+ * "what was said in the comments", so silently reconstructing the card from
+ * only its own fields would erase both on the very first save.
  */
 export async function updateCard(input: {
   boardId: string;
@@ -886,6 +894,9 @@ export async function updateCard(input: {
           : {
               id: c.id,
               title: input.title,
+              ...(c.authorId ? { authorId: c.authorId } : {}),
+              ...(c.createdAt ? { createdAt: c.createdAt } : {}),
+              ...(c.comments?.length ? { comments: c.comments } : {}),
               ...(input.description ? { description: input.description } : {}),
               ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
               ...(input.dueDate ? { dueDate: input.dueDate } : {}),
@@ -894,6 +905,37 @@ export async function updateCard(input: {
       ),
     })),
   );
+}
+
+/**
+ * Appends a comment to a card. Same read-modify-write shape as every other
+ * card mutation — see the note on `mutateBoardColumns`.
+ */
+export async function addCardComment(input: {
+  boardId: string;
+  cardId: string;
+  authorId: string;
+  text: string;
+}): Promise<BoardCardComment> {
+  const comment: BoardCardComment = {
+    id: randomUUID(),
+    authorId: input.authorId,
+    text: input.text,
+    createdAt: new Date().toISOString(),
+  };
+
+  await mutateBoardColumns(input.boardId, (columns) =>
+    columns.map((col) => ({
+      ...col,
+      cards: col.cards.map((c) =>
+        c.id !== input.cardId
+          ? c
+          : { ...c, comments: [...(c.comments ?? []), comment] },
+      ),
+    })),
+  );
+
+  return comment;
 }
 
 /**

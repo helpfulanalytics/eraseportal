@@ -720,19 +720,23 @@ function CommentsPanel({
   };
 
   const feed = [...comments].reverse();
+  const hasActivity = feed.length > 0 || Boolean(card.authorId && card.createdAt);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 pb-3">
+      <div className="flex items-center gap-2 border-k-black-06 border-b pb-3">
         <MessageSquareIcon className="size-4 text-k-black-56" strokeWidth={1.8} />
         <h3 className="font-medium text-k-black-84 text-md">
           Comments and activity
         </h3>
       </div>
 
-      <div className="flex items-start gap-2">
+      {/* One bordered composer, not loose parts — the textarea and its
+          Comment button read as a single control, with a focus ring that
+          picks up the moment the textarea is active. */}
+      <div className="mt-3 flex items-start gap-2">
         <PersonAvatar personId={me?.id ?? ""} className="mt-0.5 size-7 shrink-0" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 rounded-xl border border-k-black-12 bg-background p-2 transition-colors focus-within:border-k-blue focus-within:ring-1 focus-within:ring-k-blue-08">
           <textarea
             value={draft}
             disabled={disabled || pending}
@@ -746,14 +750,10 @@ function CommentsPanel({
                 post();
               }
             }}
-            className={cn(dialogFieldClass, "h-auto resize-none py-2")}
+            className="h-auto w-full resize-none border-none bg-transparent p-1 text-k-black-84 text-md outline-none placeholder:text-k-gray-ad disabled:opacity-60"
           />
-          {error ? (
-            <p role="alert" className="mt-1 text-k-red text-sm">
-              {error}
-            </p>
-          ) : null}
-          <div className="mt-1.5 flex justify-end">
+          <div className="flex items-center justify-between px-1 pt-1">
+            <span className="text-k-black-24 text-xs">⌘ + Enter to post</span>
             <button
               type="button"
               disabled={!draft.trim() || disabled || pending}
@@ -766,28 +766,43 @@ function CommentsPanel({
         </div>
       </div>
 
-      <ul className="mt-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-        {feed.map((comment) => (
-          <CommentRow key={comment.id} comment={comment} />
-        ))}
+      {error ? (
+        <p role="alert" className="mt-1.5 ml-9 text-k-red text-sm">
+          {error}
+        </p>
+      ) : null}
 
-        {card.authorId && card.createdAt ? (
-          <li className="flex items-start gap-2 text-sm">
-            <PersonAvatar personId={card.authorId} className="mt-0.5 size-7 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-k-black-72">
-                <span className="font-medium text-k-black-84">
-                  {author?.name ?? "Someone"}
-                </span>{" "}
-                added this card
-              </p>
-              <p className="mt-0.5 text-k-black-36 text-xs">
-                {formatDateTime(card.createdAt)}
-              </p>
-            </div>
-          </li>
-        ) : null}
-      </ul>
+      {hasActivity ? (
+        <ul className="mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+          {feed.map((comment) => (
+            <CommentRow key={comment.id} comment={comment} />
+          ))}
+
+          {card.authorId && card.createdAt ? (
+            <li className="flex items-start gap-2 text-sm">
+              <PersonAvatar personId={card.authorId} className="mt-0.5 size-7 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-k-black-72">
+                  <span className="font-medium text-k-black-84">
+                    {author?.name ?? "Someone"}
+                  </span>{" "}
+                  added this card
+                </p>
+                <p className="mt-0.5 text-k-black-36 text-xs">
+                  {formatDateTime(card.createdAt)}
+                </p>
+              </div>
+            </li>
+          ) : null}
+        </ul>
+      ) : (
+        // Without this, an old card (no authorId/createdAt) with zero
+        // comments renders nothing at all below the composer — reads as
+        // broken rather than simply empty.
+        <p className="mt-6 text-center text-k-black-24 text-sm">
+          No activity yet.
+        </p>
+      )}
     </div>
   );
 }

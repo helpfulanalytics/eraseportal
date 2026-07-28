@@ -9,6 +9,7 @@ import {
   LayoutTemplateIcon,
   LinkIcon,
   MessageSquareIcon,
+  UserIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -132,7 +133,7 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
                 <span className="truncate">{folder.name}</span>
               </SidebarRow>
 
-              {folder.items.length > 0 ? (
+              {folder.items.length > 0 || folder.clients.length > 0 ? (
                 <ul className="flex flex-col gap-px">
                   {folder.items.map((item) => {
                     const itemHref = hrefFor(item);
@@ -154,6 +155,25 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
                       </li>
                     );
                   })}
+                  {/* No per-client page exists yet — every client row lands
+                      on the workspace-wide list, same as clicking a client
+                      row anywhere else in the app. */}
+                  {folder.clients.map((client) => (
+                    <li key={`client:${client.id}`}>
+                      <SidebarRow
+                        href="/clients"
+                        active={pathname === "/clients"}
+                        className="pl-7"
+                      >
+                        <UserIcon
+                          className="size-4 shrink-0"
+                          style={{ color: client.color }}
+                          strokeWidth={1.6}
+                        />
+                        <span className="truncate">{client.name}</span>
+                      </SidebarRow>
+                    </li>
+                  ))}
                 </ul>
               ) : null}
             </li>

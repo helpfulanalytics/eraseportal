@@ -39,6 +39,13 @@ export interface Person {
    * seeded clients, mostly. Links a session back to a domain Person.
    */
   uid?: string;
+  /**
+   * The one folder this client is associated with, if any — only meaningful
+   * when `kind` is `"client"`. A client can belong to at most one folder in
+   * this model; an engagement spanning several folders, or several client
+   * contacts on one engagement, isn't represented here.
+   */
+  folderId?: string;
 }
 
 /**
@@ -297,4 +304,12 @@ export interface NavFolder {
     /** Only set for `kind: "board"` — the board's own colour, not the item's. */
     color?: string;
   }>;
+  /**
+   * Clients linked to this folder via `Person.folderId`. A separate array
+   * rather than folded into `items`: a client is a `people` document, not a
+   * `FolderItem` — it has no `kind`/`meta` shape and isn't part of the
+   * folder's own `itemIds` ordering, so it doesn't fit the invariant `items`
+   * otherwise holds (every entry mirrors a real FolderItem doc).
+   */
+  clients: Array<{ id: string; name: string; initials: string; color: string }>;
 }

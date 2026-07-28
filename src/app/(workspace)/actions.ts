@@ -196,6 +196,9 @@ export async function createEmbedAction(
 export async function createClientAction(
   name: string,
   email: string,
+  /** Set when the Create panel was opened from inside a folder — links the
+   * new client to it. Omitted from /clients, which has no folder context. */
+  folderId?: string,
 ): Promise<string> {
   await requireUser();
 
@@ -206,7 +209,11 @@ export async function createClientAction(
     throw new Error("That doesn't look like an email address.");
   }
 
-  const person = await createClient({ name: trimmedName, email: trimmedEmail });
+  const person = await createClient({
+    name: trimmedName,
+    email: trimmedEmail,
+    folderId,
+  });
   revalidatePath("/", "layout");
   return person.id;
 }

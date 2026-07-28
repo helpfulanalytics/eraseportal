@@ -295,9 +295,11 @@ export async function getNavTree(): Promise<NavFolder[]> {
       // folder's hand-arranged order), which is enough to pick an icon and
       // build an href — except a board's colour, which lives only on the
       // board document. That's the one thing worth a follow-up read.
-      const [items, boards] = await Promise.all([
+      // Clients aren't FolderItem docs at all — a separate query.
+      const [items, boards, clients] = await Promise.all([
         getFolderItems(folder.id),
         getBoardsInFolder(folder.id),
+        getClientsInFolder(folder.id),
       ]);
       const boardColor = new Map(boards.map((b) => [b.id, b.color]));
 
@@ -314,6 +316,12 @@ export async function getNavTree(): Promise<NavFolder[]> {
             meta: i.meta,
             color: i.kind === "board" ? boardColor.get(i.id) : undefined,
           })),
+        clients: clients.map((c) => ({
+          id: c.id,
+          name: c.name,
+          initials: c.initials,
+          color: c.color,
+        })),
       };
     }),
   );
@@ -936,6 +944,9 @@ export async function createEmbed(input: {
 export async function createClient(input: {
   name: string;
   email: string;
+  /** Set when the create flow was opened from inside a folder. Optional — a
+   * client made from the workspace-wide /clients page has none. */
+  folderId?: string;
 }): Promise<Person> {
   const doc = adminDb().collection(COLLECTIONS.people).doc();
 
@@ -952,10 +963,25 @@ export async function createClient(input: {
         ) % PERSON_COLORS.length
       ],
     kind: "client",
+    ...(input.folderId ? { folderId: input.folderId } : {}),
   };
 
   await doc.set(withoutId(person));
   return person;
+}
+
+/**
+ * Two straight equality filters on different fields — Firestore satisfies
+ * this without a composite index (that's only required once an inequality
+ * or an orderBy on a different field joins the mix), so nothing needed
+ * adding to firestore.indexes.json for this one.
+ */
+export async function getClientsInFolder(folderId: string): Promise<Person[]> {
+  return many<Person>(
+    collection(COLLECTIONS.people)
+      .where("kind", "==", "client")
+      .where("folderId", "==", folderId),
+  );
 }
 
 /* ---- board cards ------------------------------------------------------- */

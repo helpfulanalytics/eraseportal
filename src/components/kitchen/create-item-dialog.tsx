@@ -135,7 +135,9 @@ export function CreateItemDialog({
             break;
           }
           case "client":
-            await createClientAction(trimmed, email);
+            // folderId is whatever context this dialog opened in — undefined
+            // when opened from /clients itself, which has none to link to.
+            await createClientAction(trimmed, email, folderId);
             onClose();
             router.push("/clients");
             break;

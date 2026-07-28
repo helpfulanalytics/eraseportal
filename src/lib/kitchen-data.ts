@@ -652,6 +652,22 @@ function linkItemIntoFolder(
   });
 }
 
+/**
+ * The inverse of `linkItemIntoFolder`: removes an item's row and its id from
+ * the owning folder's `itemIds`, in the same batch as deleting the subject
+ * document itself. Same three-write shape as creating one, run backwards.
+ */
+function unlinkItemFromFolder(
+  batch: FirebaseFirestore.WriteBatch,
+  input: { id: string; folderId: string },
+): void {
+  const db = adminDb();
+  batch.delete(db.collection(COLLECTIONS.items).doc(input.id));
+  batch.update(db.collection(COLLECTIONS.folders).doc(input.folderId), {
+    itemIds: FieldValue.arrayRemove(input.id),
+  });
+}
+
 /** Columns a new board starts with, matching the seeded board's shape. */
 const DEFAULT_BOARD_COLUMNS = [
   { id: "col_todo", name: "To Do" },
@@ -688,6 +704,31 @@ export async function createBoard(input: {
   await batch.commit();
 
   return board;
+}
+
+/**
+ * A board's name is stored twice — on the board document itself, and again
+ * on its `items` row, which is what the folder listing and sidebar actually
+ * render. Both are written in one batch; updating only one would leave the
+ * board page and the folder view disagreeing about its name.
+ */
+export async function renameBoard(boardId: string, name: string): Promise<void> {
+  const db = adminDb();
+  const batch = db.batch();
+  batch.update(db.collection(COLLECTIONS.boards).doc(boardId), { name });
+  batch.update(db.collection(COLLECTIONS.items).doc(boardId), { name });
+  await batch.commit();
+}
+
+export async function deleteBoard(boardId: string): Promise<void> {
+  const board = await getBoard(boardId);
+  if (!board) return;
+
+  const db = adminDb();
+  const batch = db.batch();
+  batch.delete(db.collection(COLLECTIONS.boards).doc(boardId));
+  unlinkItemFromFolder(batch, { id: boardId, folderId: board.folderId });
+  await batch.commit();
 }
 
 export async function createDocument(input: {

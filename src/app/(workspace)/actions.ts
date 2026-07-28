@@ -20,9 +20,11 @@ import {
   createDocument,
   createEmbed,
   createFolder,
+  deleteBoard,
   deleteCard,
   getCurrentUser,
   moveCard,
+  renameBoard,
   sendMessage,
   setTaskCompleted,
   setWorkspaceName,
@@ -298,4 +300,29 @@ export async function addCardCommentAction(
 
   await addCardComment({ boardId, cardId, authorId: me.id, text: trimmed });
   revalidatePath(`/boards/${boardId}`);
+}
+
+/* ---- boards -------------------------------------------------------------- */
+
+export async function renameBoardAction(
+  boardId: string,
+  folderId: string,
+  name: string,
+): Promise<void> {
+  await requireUser();
+
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A board needs a name.");
+
+  await renameBoard(boardId, trimmed);
+  revalidatePath(`/boards/${boardId}`);
+  revalidatePath(`/folders/${folderId}`);
+  revalidatePath("/", "layout"); // the sidebar's folder tree shows board names
+}
+
+export async function deleteBoardAction(boardId: string, folderId: string): Promise<void> {
+  await requireUser();
+  await deleteBoard(boardId);
+  revalidatePath(`/folders/${folderId}`);
+  revalidatePath("/", "layout");
 }

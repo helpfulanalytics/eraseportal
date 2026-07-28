@@ -3,7 +3,6 @@ import {
   ChevronDownIcon,
   FileTextIcon,
   FolderIcon,
-  GalleryVerticalEndIcon,
   LayoutGridIcon,
   LayoutTemplateIcon,
   LinkIcon,
@@ -14,6 +13,7 @@ import {
 import { notFound } from "next/navigation";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { FileThumb } from "@/components/kitchen/file-thumb";
+import { FolderCoverButton } from "@/components/kitchen/folder-cover-button";
 import { FolderHeaderControls } from "@/components/kitchen/folder-header-controls";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
 import { CreateMenu } from "@/components/kitchen/create-menu";
@@ -82,25 +82,37 @@ export default async function FolderPage({
         shareTitle={folder.name}
       />
 
-      <div
-        className="flex h-56 items-center justify-center bg-k-gray-f8"
-        aria-hidden="true"
-      >
-        <FolderIcon
-          className="size-24 fill-k-yellow text-k-yellow opacity-90"
-          strokeWidth={1}
+      {folder.coverUrl ? (
+        // External Storage URL; this app has no next/image remote-pattern
+        // config, and adding one for a single cover image isn't worth it yet.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={folder.coverUrl}
+          alt=""
+          className="h-56 w-full object-cover"
         />
-      </div>
+      ) : (
+        <div
+          className="flex h-56 items-center justify-center bg-k-gray-f8"
+          aria-hidden="true"
+        >
+          <FolderIcon
+            className="size-24 opacity-90"
+            style={{
+              color: folder.color ?? "var(--k-yellow)",
+              fill: folder.color ?? "var(--k-yellow)",
+            }}
+            strokeWidth={1}
+          />
+        </div>
+      )}
 
       <div className="px-12 pt-10 pb-12">
         <div className="flex items-center gap-3">
-          <FolderIcon
-            className="size-8 shrink-0 fill-k-yellow text-k-yellow"
-            strokeWidth={1.3}
-          />
           <FolderHeaderControls
             folderId={folderId}
             name={folder.name}
+            color={folder.color}
             itemCount={folder.itemIds.length}
             triggerClassName="mt-1.5"
           />
@@ -108,9 +120,7 @@ export default async function FolderPage({
             <HeaderIconButton label="Favourite">
               <StarIcon className="size-4" strokeWidth={1.6} />
             </HeaderIconButton>
-            <HeaderIconButton label="Change cover">
-              <GalleryVerticalEndIcon className="size-4" strokeWidth={1.6} />
-            </HeaderIconButton>
+            <FolderCoverButton folderId={folderId} />
             <HeaderIconButton label="Toggle description">
               <AlignLeftIcon className="size-4" strokeWidth={1.6} />
             </HeaderIconButton>

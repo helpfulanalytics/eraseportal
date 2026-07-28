@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { BOARD_COLORS } from "@/lib/kitchen-format";
+import { SWATCH_COLORS } from "@/lib/kitchen-format";
 import { cn } from "@/lib/utils";
 
 export function BoardHeader({
@@ -51,7 +51,7 @@ export function BoardHeader({
 }) {
   const [title, setTitle] = useState(name);
   const [editing, setEditing] = useState(false);
-  const [boardColor, setBoardColor] = useState(color ?? BOARD_COLORS[0]);
+  const [boardColor, setBoardColor] = useState(color ?? SWATCH_COLORS[0]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deleting, startDelete] = useTransition();
@@ -192,7 +192,7 @@ export function BoardHeader({
                   close the menu, since picking a colour is quick to redo if
                   the wrong swatch gets hit. */}
               <div className="flex items-center gap-1.5 px-1.5 py-1">
-                {BOARD_COLORS.map((swatch) => (
+                {SWATCH_COLORS.map((swatch) => (
                   <button
                     key={swatch}
                     type="button"

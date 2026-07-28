@@ -1,9 +1,18 @@
 "use client";
 
 /**
- * Folder title + overflow menu, mirroring `BoardHeader`'s pattern:
- * click-to-edit for the name, `window.confirm`/`window.alert` for delete
- * since no confirm-dialog primitive exists in this codebase yet.
+ * Folder icon + title + overflow menu, mirroring `BoardHeader`'s pattern:
+ * click-to-edit for the name, a swatch row for colour, `window.confirm`/
+ * `window.alert` for delete since no confirm-dialog primitive exists in this
+ * codebase yet.
+ *
+ * The folder icon lives here rather than in the parent page specifically so
+ * a colour pick can repaint it instantly from local state — the same reason
+ * `BoardHeader` renders its own `LayoutTemplateIcon`. The *other* FolderIcon,
+ * the big one in the hero banner, stays in the server page: it reads
+ * `folder.color` from props and only updates once `revalidatePath` refreshes
+ * the page, which is an imperceptible wait for a background decorative
+ * element and not worth threading colour state up to a second component for.
  *
  * Delete is conditional — `deleteFolderAction` throws if the folder still
  * has items in it (see the comment on `deleteFolder` in kitchen-data.ts;
@@ -13,36 +22,61 @@
  * showing "Delete?" and then failing.
  */
 import { useRef, useState, useTransition } from "react";
-import { MoreHorizontalIcon } from "lucide-react";
+import { CheckIcon, FolderIcon, MoreHorizontalIcon } from "lucide-react";
 import {
   deleteFolderAction,
   renameFolderAction,
+  setFolderColorAction,
 } from "@/app/(workspace)/actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SWATCH_COLORS } from "@/lib/kitchen-format";
 import { cn } from "@/lib/utils";
+
+/** The look every folder had before per-folder colour existed. */
+const DEFAULT_FOLDER_COLOR = "var(--k-yellow)";
 
 export function FolderHeaderControls({
   folderId,
   name,
+  color,
   itemCount,
   triggerClassName,
 }: {
   folderId: string;
   name: string;
+  color?: string;
   itemCount: number;
   triggerClassName?: string;
 }) {
   const [title, setTitle] = useState(name);
   const [editing, setEditing] = useState(false);
+  const [folderColor, setFolderColor] = useState(color ?? DEFAULT_FOLDER_COLOR);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deleting, startDelete] = useTransition();
+  const [recoloring, startRecolor] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const pickColor = (next: string) => {
+    if (next === folderColor) return;
+    const previous = folderColor;
+    setFolderColor(next);
+    startRecolor(async () => {
+      try {
+        await setFolderColorAction(folderId, next);
+      } catch {
+        setFolderColor(previous);
+      }
+    });
+  };
 
   const commit = () => {
     setEditing(false);
@@ -91,6 +125,12 @@ export function FolderHeaderControls({
 
   return (
     <>
+      <FolderIcon
+        className="size-8 shrink-0"
+        style={{ color: folderColor, fill: folderColor }}
+        strokeWidth={1.3}
+      />
+
       {editing ? (
         <input
           ref={inputRef}
@@ -136,6 +176,32 @@ export function FolderHeaderControls({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-44">
           <DropdownMenuItem onClick={() => setEditing(true)}>Rename</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Colour</DropdownMenuLabel>
+            {/* Plain buttons, not DropdownMenuItem — same reasoning as
+                BoardHeader's swatch row: picking a colour shouldn't close
+                the menu on the first click. */}
+            <div className="flex items-center gap-1.5 px-1.5 py-1">
+              {SWATCH_COLORS.map((swatch) => (
+                <button
+                  key={swatch}
+                  type="button"
+                  disabled={recoloring}
+                  aria-label="Set folder colour"
+                  aria-pressed={swatch === folderColor}
+                  onClick={() => pickColor(swatch)}
+                  style={{ backgroundColor: swatch }}
+                  className="flex size-6 items-center justify-center rounded-full ring-offset-2 ring-offset-background transition-shadow hover:ring-2 hover:ring-k-black-16 disabled:opacity-60"
+                >
+                  {swatch === folderColor ? (
+                    <CheckIcon className="size-3.5 text-k-white" strokeWidth={2.5} />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" disabled={deleting} onClick={remove}>
             {deleting ? "Deleting…" : "Delete folder"}
           </DropdownMenuItem>

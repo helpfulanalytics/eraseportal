@@ -65,6 +65,8 @@ export interface Folder {
   access?: FolderAccess;
   /** Only meaningful when `access` is `internal`. */
   internalRole?: "viewer" | "editor";
+  /** One of `SWATCH_COLORS` in kitchen-format.ts. Absent on older folders. */
+  color?: string;
 }
 
 /** Metadata varies by kind — conversations count messages, files carry bytes. */
@@ -194,7 +196,7 @@ export interface Board {
   name: string;
   folderId: string;
   columns: BoardColumn[];
-  /** One of `BOARD_COLORS` in kitchen-format.ts. Absent on older boards. */
+  /** One of `SWATCH_COLORS` in kitchen-format.ts. Absent on older boards. */
   color?: string;
 }
 
@@ -273,10 +275,26 @@ export type ConversationFile = Attachment & {
 /**
  * The sidebar's folder tree. A projection rather than the full `Folder`: the
  * nav renders on every route, so it carries only what it draws.
+ *
+ * One unified `items` list rather than separate `boards`/`conversations`
+ * arrays (the earlier shape) — the sidebar shows every kind of folder
+ * content now, not just those two, and a per-kind array for each of
+ * conversation/board/document/embed would just be the same list partitioned
+ * five ways for no benefit. `file` is deliberately excluded: uploaded files
+ * don't get their own row in the tree, the same way they don't in Trello's
+ * or Notion's sidebars — they're reachable from the folder page and Library.
  */
 export interface NavFolder {
   id: string;
   name: string;
-  conversations: Array<{ id: string; name: string }>;
-  boards: Array<{ id: string; name: string; color?: string }>;
+  /** One of `SWATCH_COLORS`. Absent on folders created before this existed. */
+  color?: string;
+  items: Array<{
+    id: string;
+    name: string;
+    kind: Exclude<ItemKind, "file">;
+    meta: ItemMeta;
+    /** Only set for `kind: "board"` — the board's own colour, not the item's. */
+    color?: string;
+  }>;
 }

@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
-import { BOARD_COLORS } from "./kitchen-format";
+import { SWATCH_COLORS } from "./kitchen-format";
 import type {
   Block,
   Board,
@@ -291,15 +291,29 @@ export async function getNavTree(): Promise<NavFolder[]> {
   const folders = await getFolders();
   return Promise.all(
     folders.map(async (folder) => {
-      const [conversations, boards] = await Promise.all([
-        getConversationsInFolder(folder.id),
+      // getFolderItems already carries kind + meta for everything (in the
+      // folder's hand-arranged order), which is enough to pick an icon and
+      // build an href — except a board's colour, which lives only on the
+      // board document. That's the one thing worth a follow-up read.
+      const [items, boards] = await Promise.all([
+        getFolderItems(folder.id),
         getBoardsInFolder(folder.id),
       ]);
+      const boardColor = new Map(boards.map((b) => [b.id, b.color]));
+
       return {
         id: folder.id,
         name: folder.name,
-        conversations: conversations.map((c) => ({ id: c.id, name: c.name })),
-        boards: boards.map((b) => ({ id: b.id, name: b.name, color: b.color })),
+        color: folder.color,
+        items: items
+          .filter((i) => i.kind !== "file")
+          .map((i) => ({
+            id: i.id,
+            name: i.name,
+            kind: i.kind as Exclude<ItemKind, "file">,
+            meta: i.meta,
+            color: i.kind === "board" ? boardColor.get(i.id) : undefined,
+          })),
       };
     }),
   );
@@ -545,6 +559,23 @@ export async function deleteFolder(folderId: string): Promise<void> {
   await adminDb().collection(COLLECTIONS.folders).doc(folderId).delete();
 }
 
+/** Like a board's colour, this has one source of truth — no `items` copy to keep in sync. */
+export async function setFolderColor(folderId: string, color: string): Promise<void> {
+  await adminDb().collection(COLLECTIONS.folders).doc(folderId).update({ color });
+}
+
+/**
+ * The bytes are already in Storage by the time this runs — the browser
+ * uploads directly (see `uploadFile` in `firebase/storage.ts`) and this just
+ * records where. Reuses the same `folders/{folderId}` Storage prefix as a
+ * regular file upload rather than a `folders/{folderId}/cover` subpath,
+ * because storage.rules only has a match block for that exact shape; a cover
+ * subfolder would need a rules change this doesn't need.
+ */
+export async function setFolderCoverUrl(folderId: string, url: string): Promise<void> {
+  await adminDb().collection(COLLECTIONS.folders).doc(folderId).update({ coverUrl: url });
+}
+
 /**
  * A conversation is three writes, not one: the conversation itself, the
  * `items` row that makes it show up in the folder listing, and the id appended
@@ -770,7 +801,7 @@ export async function createBoard(input: {
     name: input.name,
     folderId: input.folderId,
     columns: DEFAULT_BOARD_COLUMNS.map((c) => ({ ...c, cards: [] })),
-    color: input.color ?? BOARD_COLORS[0],
+    color: input.color ?? SWATCH_COLORS[0],
   };
 
   const batch = db.batch();

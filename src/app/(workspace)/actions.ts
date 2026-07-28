@@ -33,6 +33,8 @@ import {
   renameConversation,
   renameFolder,
   sendMessage,
+  setFolderColor,
+  setFolderCoverUrl,
   setBoardColor,
   setTaskCompleted,
   setWorkspaceName,
@@ -424,4 +426,23 @@ export async function deleteConversationAction(
   await deleteConversation(conversationId);
   revalidatePath(`/folders/${folderId}`);
   revalidatePath("/", "layout");
+}
+
+export async function setFolderColorAction(
+  folderId: string,
+  color: string,
+): Promise<void> {
+  await requireUser();
+  await setFolderColor(folderId, color);
+  revalidatePath(`/folders/${folderId}`);
+  revalidatePath("/", "layout"); // the sidebar tints the folder row too
+}
+
+export async function setFolderCoverAction(
+  folderId: string,
+  url: string,
+): Promise<void> {
+  await requireUser();
+  await setFolderCoverUrl(folderId, url);
+  revalidatePath(`/folders/${folderId}`);
 }

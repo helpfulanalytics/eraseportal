@@ -5,13 +5,14 @@
 import type { FolderItem } from "./kitchen-types";
 
 /**
- * Fixed swatch set for board colour and person avatar tints — the same five
- * `--k-*` tokens the seeded people already use, rather than an arbitrary hex
- * picker. Both server (default colour on `createBoard`) and client (the
- * swatch picker) need this list, which is why it lives here rather than in
- * kitchen-data.ts: that module throws if imported from the browser.
+ * Fixed swatch set shared by board colour, folder colour, and person avatar
+ * tints — the same five `--k-*` tokens the seeded people already use, rather
+ * than an arbitrary hex picker. Both server (the default colour on
+ * `createBoard`) and client (the swatch pickers) need this list, which is
+ * why it lives here rather than in kitchen-data.ts: that module throws if
+ * imported from the browser.
  */
-export const BOARD_COLORS = [
+export const SWATCH_COLORS = [
   "var(--k-blue)",
   "var(--k-purple)",
   "var(--k-green-0e)",

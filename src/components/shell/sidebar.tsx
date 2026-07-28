@@ -3,8 +3,11 @@
 import {
   ArchiveIcon,
   CircleCheckIcon,
+  ExternalLinkIcon,
+  FileTextIcon,
   FolderIcon,
   LayoutTemplateIcon,
+  LinkIcon,
   MessageSquareIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -37,6 +40,48 @@ const LINKS = [
   { href: "/tasks/me", icon: CircleCheckIcon, label: "My Tasks" },
   { href: "/library", icon: ArchiveIcon, label: "Library" },
 ];
+
+type NavItem = NavFolder["items"][number];
+
+/**
+ * Route for a sidebar item, by kind. A near-duplicate of `itemHref` in
+ * kitchen-format.ts, which exists because that one takes a full `FolderItem`
+ * (folderId, createdAt, authorId — fields the sidebar never fetches). Keeping
+ * this one deliberately slim rather than widening `NavFolder.items` to match
+ * `FolderItem` just to reuse one switch statement.
+ */
+function hrefFor(item: NavItem): string {
+  switch (item.kind) {
+    case "conversation":
+      return `/conversations/${item.id}`;
+    case "board":
+      return `/boards/${item.id}`;
+    case "document":
+      return `/documents/${item.id}`;
+    case "embed":
+      return `/embeds/${item.id}`;
+  }
+}
+
+/**
+ * Link is stored as an embed whose provider says "Link" — see `createEmbed`
+ * in kitchen-data.ts — so distinguishing the two icons means reading
+ * `meta.provider`, not `kind`.
+ */
+function iconFor(item: NavItem) {
+  switch (item.kind) {
+    case "conversation":
+      return MessageSquareIcon;
+    case "board":
+      return LayoutTemplateIcon;
+    case "document":
+      return FileTextIcon;
+    case "embed":
+      return item.meta.type === "embed" && item.meta.provider === "Link"
+        ? ExternalLinkIcon
+        : LinkIcon;
+  }
+}
 
 export function Sidebar({ folders }: { folders: NavFolder[] }) {
   const pathname = usePathname();
@@ -72,55 +117,43 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
       <ul className="flex flex-col gap-px px-2 pb-4">
         {folders.map((folder) => {
           const href = `/folders/${folder.id}`;
-          // Boards first, then conversations — arbitrary but stable, so the
-          // tree doesn't reshuffle itself as items are created.
-          const children = [
-            ...folder.boards.map((b) => ({
-              key: `board:${b.id}`,
-              href: `/boards/${b.id}`,
-              name: b.name,
-              icon: LayoutTemplateIcon,
-              color: b.color,
-            })),
-            ...folder.conversations.map((c) => ({
-              key: `conv:${c.id}`,
-              href: `/conversations/${c.id}`,
-              name: c.name,
-              icon: MessageSquareIcon,
-              color: undefined as string | undefined,
-            })),
-          ];
           return (
             <li key={folder.id}>
               <SidebarRow href={href} active={pathname === href}>
                 <FolderIcon
-                  className="size-4 shrink-0 fill-k-yellow text-k-yellow"
+                  className={cn("size-4 shrink-0", !folder.color && "fill-k-yellow text-k-yellow")}
+                  style={
+                    folder.color
+                      ? { color: folder.color, fill: folder.color }
+                      : undefined
+                  }
                   strokeWidth={1.5}
                 />
                 <span className="truncate">{folder.name}</span>
               </SidebarRow>
 
-              {children.length > 0 ? (
+              {folder.items.length > 0 ? (
                 <ul className="flex flex-col gap-px">
-                  {children.map((child) => (
-                    <li key={child.key}>
-                      <SidebarRow
-                        href={child.href}
-                        active={pathname === child.href}
-                        className="pl-7"
-                      >
-                        <child.icon
-                          className={cn(
-                            "size-4 shrink-0",
-                            !child.color && "text-k-black-56",
-                          )}
-                          style={child.color ? { color: child.color } : undefined}
-                          strokeWidth={1.6}
-                        />
-                        <span className="truncate">{child.name}</span>
-                      </SidebarRow>
-                    </li>
-                  ))}
+                  {folder.items.map((item) => {
+                    const itemHref = hrefFor(item);
+                    const Icon = iconFor(item);
+                    return (
+                      <li key={item.id}>
+                        <SidebarRow
+                          href={itemHref}
+                          active={pathname === itemHref}
+                          className="pl-7"
+                        >
+                          <Icon
+                            className={cn("size-4 shrink-0", !item.color && "text-k-black-56")}
+                            style={item.color ? { color: item.color } : undefined}
+                            strokeWidth={1.6}
+                          />
+                          <span className="truncate">{item.name}</span>
+                        </SidebarRow>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : null}
             </li>

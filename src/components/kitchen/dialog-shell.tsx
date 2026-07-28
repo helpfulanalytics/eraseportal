@@ -19,24 +19,39 @@
  */
 import { useEffect } from "react";
 import { XIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const SIZE_CLASS = {
+  md: "max-w-[440px]",
+  lg: "max-w-[600px]",
+} as const;
 
 export function DialogShell({
   title,
+  subtitle,
+  size = "md",
   onClose,
   onSubmit,
   submitLabel = "Save",
   pending,
   canSubmit,
   error,
+  leftAction,
   children,
 }: {
   title: string;
+  /** e.g. "in list Sprint" under the title, for the card detail view. */
+  subtitle?: React.ReactNode;
+  /** "lg" is the card detail panel; every other dialog stays at "md". */
+  size?: "md" | "lg";
   onClose: () => void;
   onSubmit: () => void;
   submitLabel?: string;
   pending?: boolean;
   canSubmit: boolean;
   error?: string | null;
+  /** Rendered at the left of the footer, opposite Save — a Delete button. */
+  leftAction?: React.ReactNode;
   children: React.ReactNode;
 }) {
   useEffect(() => {
@@ -58,29 +73,40 @@ export function DialogShell({
         aria-modal="true"
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[440px] rounded-2xl bg-background shadow-xl"
+        className={cn(
+          "flex max-h-[85vh] w-full flex-col rounded-2xl bg-background shadow-xl",
+          SIZE_CLASS[size],
+        )}
       >
-        <div className="flex items-start justify-between px-6 pt-5 pb-4">
-          <h2 className="font-semibold text-k-black-84 text-section">{title}</h2>
+        <div className="flex shrink-0 items-start justify-between px-6 pt-5 pb-4">
+          <div className="min-w-0">
+            <h2 className="truncate font-semibold text-k-black-84 text-section">
+              {title}
+            </h2>
+            {subtitle ? (
+              <div className="mt-0.5 text-k-black-40 text-sm">{subtitle}</div>
+            ) : null}
+          </div>
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="-mr-1 flex size-7 items-center justify-center rounded-md text-k-black-40 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
+            className="-mr-1 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-md text-k-black-40 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
           >
             <XIcon className="size-4.5" strokeWidth={1.7} />
           </button>
         </div>
 
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
 
         {error ? (
-          <p role="alert" className="px-6 pt-2 text-k-red text-sm">
+          <p role="alert" className="shrink-0 px-6 pt-2 text-k-red text-sm">
             {error}
           </p>
         ) : null}
 
-        <div className="flex justify-end px-6 pt-4 pb-5">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-6 pt-4 pb-5">
+          <div>{leftAction}</div>
           <button
             type="button"
             disabled={!canSubmit || pending}

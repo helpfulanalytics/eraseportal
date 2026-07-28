@@ -896,10 +896,19 @@ export async function updateCard(input: {
   );
 }
 
+/**
+ * Moves a card to a column, optionally at a specific position within it.
+ *
+ * `toIndex` is omitted by the "Move to <column>" menu item, which always
+ * appends — there's no position to express from a menu. Drag-and-drop
+ * supplies it, since dropping between two cards means something more precise
+ * than "put it at the end".
+ */
 export async function moveCard(input: {
   boardId: string;
   cardId: string;
   toColumnId: string;
+  toIndex?: number;
 }): Promise<void> {
   await mutateBoardColumns(input.boardId, (columns) => {
     let moved: BoardCard | undefined;
@@ -912,11 +921,16 @@ export async function moveCard(input: {
     if (!moved) return columns; // already gone — nothing to move
 
     const card = moved;
-    return withoutCard.map((col) =>
-      col.id === input.toColumnId
-        ? { ...col, cards: [...col.cards, card] }
-        : col,
-    );
+    return withoutCard.map((col) => {
+      if (col.id !== input.toColumnId) return col;
+      const cards = [...col.cards];
+      const at =
+        input.toIndex === undefined
+          ? cards.length
+          : Math.max(0, Math.min(input.toIndex, cards.length));
+      cards.splice(at, 0, card);
+      return { ...col, cards };
+    });
   });
 }
 

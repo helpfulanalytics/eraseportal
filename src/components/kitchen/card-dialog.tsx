@@ -1,45 +1,78 @@
 "use client";
 
 /**
- * Create/edit dialog for a board card. One component for both — editing is
+ * Create/detail dialog for a board card — Trello's card modal, scaled to
+ * what this data model actually holds: title, description, one assignee, a
+ * due date, and labels. There's no comment thread or attachments here
+ * because there's no data behind either; this doesn't pretend otherwise.
+ *
+ * One component for both create and the full detail view — editing is
  * creating with the fields pre-filled and a different action underneath.
+ * Create still gets the whole layout (bigger than a bare "name it" form),
+ * because there's nothing about the fields that should differ by mode.
+ *
+ * Move and Delete are instant, not gated behind Save — pick a different list
+ * from the dropdown and it fires immediately, matching Trello, where you'd
+ * never want a list change silently reverted because you closed without
+ * saving. Save covers only the fields you'd expect a Cancel to discard:
+ * title, description, assignee, due date, labels.
  *
  * Labels are a fixed set of four rather than free text, matching the four
- * tints `LABEL_TINT` in the board page actually knows how to render. A custom
- * label would fall back to a plain grey chip, which is a fine default but not
- * worth the extra input for a first pass — add free text here if that grey
- * chip ever needs a name.
+ * tints `LABEL_TINT` in board-columns.tsx actually knows how to render. A
+ * custom label would fall back to a plain grey chip, which is a fine default
+ * but not worth the extra input for a first pass — add free text here if
+ * that grey chip ever needs a name.
  */
 import { useEffect, useRef, useState, useTransition } from "react";
-import { createCardAction, updateCardAction } from "@/app/(workspace)/actions";
+import { TrashIcon } from "lucide-react";
+import {
+  createCardAction,
+  deleteCardAction,
+  moveCardAction,
+  updateCardAction,
+} from "@/app/(workspace)/actions";
 import {
   DialogShell,
   FieldLabel,
   dialogFieldClass,
 } from "@/components/kitchen/dialog-shell";
 import { usePeople } from "@/components/workspace-provider";
-import type { BoardCard } from "@/lib/kitchen-types";
+import type { BoardCard, BoardColumn } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
 const LABEL_OPTIONS = ["blocker", "security", "milestone", "launch"] as const;
 
-type CardDraft = {
+export function CardDialog({
+  boardId,
+  columnId,
+  columns,
+  card,
+  onClose,
+}: {
   boardId: string;
   columnId: string;
-  /** Present when editing; absent when creating a new card. */
+  /** For the "in list" switcher and resolving the current column's name. */
+  columns: BoardColumn[];
+  /** Present when editing/viewing; absent when creating a new card. */
   card?: BoardCard;
   onClose: () => void;
-};
-
-export function CardDialog({ boardId, columnId, card, onClose }: CardDraft) {
+}) {
   const people = usePeople();
   const [title, setTitle] = useState(card?.title ?? "");
   const [description, setDescription] = useState(card?.description ?? "");
   const [assigneeId, setAssigneeId] = useState(card?.assigneeId ?? "");
   const [dueDate, setDueDate] = useState(card?.dueDate ?? "");
   const [labels, setLabels] = useState<string[]>(card?.labels ?? []);
+  // Own state rather than reading `columnId` straight from props: after a
+  // move, the parent's `draft.columnId` doesn't update (the dialog was
+  // opened with the *original* column), so the "in list" select would
+  // otherwise snap back to it the instant React re-renders with the old
+  // controlled value.
+  const [currentColumnId, setCurrentColumnId] = useState(columnId);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [moving, startMove] = useTransition();
+  const [deleting, startDelete] = useTransition();
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -80,6 +113,28 @@ export function CardDialog({ boardId, columnId, card, onClose }: CardDraft) {
     });
   };
 
+  const move = (toColumnId: string) => {
+    if (!card || toColumnId === currentColumnId) return;
+    const previous = currentColumnId;
+    setCurrentColumnId(toColumnId);
+
+    startMove(async () => {
+      try {
+        await moveCardAction(boardId, card.id, toColumnId);
+      } catch {
+        setCurrentColumnId(previous);
+      }
+    });
+  };
+
+  const remove = () => {
+    if (!card) return;
+    startDelete(async () => {
+      await deleteCardAction(boardId, card.id);
+      onClose();
+    });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -87,47 +142,71 @@ export function CardDialog({ boardId, columnId, card, onClose }: CardDraft) {
     }
   };
 
+  const busy = pending || moving || deleting;
+
   return (
     <DialogShell
-      title={card ? "Edit Card" : "New Card"}
+      title={card ? "Card" : "New Card"}
+      size="lg"
+      subtitle={
+        card ? (
+          <span className="flex items-center gap-1.5">
+            in list
+            <select
+              value={currentColumnId}
+              disabled={busy}
+              aria-label="Move to list"
+              onChange={(e) => move(e.target.value)}
+              className="rounded border-none bg-k-black-04 px-1.5 py-0.5 text-k-black-72 text-sm outline-none focus:ring-1 focus:ring-k-blue disabled:opacity-60"
+            >
+              {columns.map((col) => (
+                <option key={col.id} value={col.id}>
+                  {col.name}
+                </option>
+              ))}
+            </select>
+          </span>
+        ) : undefined
+      }
       onClose={onClose}
       onSubmit={save}
       canSubmit={Boolean(title.trim())}
       pending={pending}
       error={error}
+      leftAction={
+        card ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={remove}
+            className="flex h-8 items-center gap-1.5 rounded-lg px-3 text-k-red text-md transition-colors hover:bg-k-red-08 disabled:opacity-40"
+          >
+            <TrashIcon className="size-3.5" strokeWidth={1.8} />
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
+        ) : null
+      }
     >
-      <div className="flex flex-col gap-4 px-6">
+      <div className="flex flex-col gap-5 px-6 pb-2">
         <div>
           <FieldLabel>Title</FieldLabel>
           <input
             ref={titleRef}
             value={title}
-            disabled={pending}
+            disabled={busy}
             aria-label="Card title"
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={onKeyDown}
-            className={dialogFieldClass}
+            className={cn(dialogFieldClass, "text-md font-medium")}
           />
         </div>
 
-        <div>
-          <FieldLabel optional>Description</FieldLabel>
-          <textarea
-            value={description}
-            disabled={pending}
-            rows={2}
-            aria-label="Card description"
-            onChange={(e) => setDescription(e.target.value)}
-            className={cn(dialogFieldClass, "h-auto resize-none py-2")}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <FieldLabel optional>Assignee</FieldLabel>
+            <FieldLabel optional>Members</FieldLabel>
             <select
               value={assigneeId}
-              disabled={pending}
+              disabled={busy}
               aria-label="Assignee"
               onChange={(e) => setAssigneeId(e.target.value)}
               className={cn(dialogFieldClass, "bg-background")}
@@ -146,7 +225,7 @@ export function CardDialog({ boardId, columnId, card, onClose }: CardDraft) {
             <input
               type="date"
               value={dueDate}
-              disabled={pending}
+              disabled={busy}
               aria-label="Due date"
               onChange={(e) => setDueDate(e.target.value)}
               className={dialogFieldClass}
@@ -163,7 +242,7 @@ export function CardDialog({ boardId, columnId, card, onClose }: CardDraft) {
                 <button
                   key={label}
                   type="button"
-                  disabled={pending}
+                  disabled={busy}
                   aria-pressed={active}
                   onClick={() => toggleLabel(label)}
                   className={cn(
@@ -178,6 +257,19 @@ export function CardDialog({ boardId, columnId, card, onClose }: CardDraft) {
               );
             })}
           </div>
+        </div>
+
+        <div>
+          <FieldLabel optional>Description</FieldLabel>
+          <textarea
+            value={description}
+            disabled={busy}
+            rows={5}
+            placeholder="Add a more detailed description…"
+            aria-label="Card description"
+            onChange={(e) => setDescription(e.target.value)}
+            className={cn(dialogFieldClass, "h-auto resize-none py-2")}
+          />
         </div>
       </div>
     </DialogShell>

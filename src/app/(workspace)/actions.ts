@@ -268,9 +268,10 @@ export async function moveCardAction(
   boardId: string,
   cardId: string,
   toColumnId: string,
+  toIndex?: number,
 ): Promise<void> {
   await requireUser();
-  await moveCard({ boardId, cardId, toColumnId });
+  await moveCard({ boardId, cardId, toColumnId, toIndex });
   revalidatePath(`/boards/${boardId}`);
 }
 

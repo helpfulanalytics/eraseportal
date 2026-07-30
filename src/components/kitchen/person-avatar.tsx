@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePerson } from "@/components/workspace-provider";
 import { cn } from "@/lib/utils";
@@ -23,6 +25,12 @@ export function PersonAvatar({
   className?: string;
 }) {
   const person = usePerson(personId);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   if (!person) return null;
 
   return (
@@ -32,7 +40,7 @@ export function PersonAvatar({
         className="flex size-full items-center justify-center overflow-hidden [&>svg]:size-full"
         style={{ backgroundColor: person.color }}
       >
-        <AvatuneAvatar theme={theme} size={120} seed={person.id} />
+        {isMounted && <AvatuneAvatar theme={theme} size={120} seed={person.id} />}
       </AvatarFallback>
     </Avatar>
   );

@@ -38,7 +38,7 @@ const config: FirebaseOptions = {
  */
 export const isFirebaseConfigured = Boolean(config.apiKey && config.projectId);
 
-function firebaseApp() {
+export function firebaseApp() {
   if (!isFirebaseConfigured) {
     throw new Error(
       "Firebase isn't configured. Copy .env.local.example to .env.local and " +

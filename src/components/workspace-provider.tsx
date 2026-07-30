@@ -13,8 +13,9 @@
  * It holds no fetching logic on purpose. The server layout does the reading;
  * this is a transport.
  */
-import { createContext, use, type ReactNode } from "react";
+import { createContext, use, useEffect, type ReactNode } from "react";
 import type { Person, Workspace } from "@/lib/kitchen-types";
+import { setupForegroundMessaging } from "@/lib/firebase/messaging";
 
 interface WorkspaceContextValue {
   /**
@@ -44,6 +45,22 @@ export function WorkspaceProvider({
   orgSlug = null,
   children,
 }: WorkspaceContextValue & { children: ReactNode }) {
+  useEffect(() => {
+    // Attempt to set up foreground messaging if permission is granted.
+    // It returns an unsubscribe function that we can return for cleanup.
+    let unsubscribe: (() => void) | void;
+    
+    setupForegroundMessaging()
+      .then((unsub) => {
+        unsubscribe = unsub;
+      })
+      .catch((err) => console.error("Foreground messaging error:", err));
+      
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
   return (
     <WorkspaceContext
       value={{ workspace, people, currentUser, orgSlug }}

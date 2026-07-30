@@ -18,6 +18,7 @@ import {
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
+import { getMessaging } from "firebase-admin/messaging";
 
 if (typeof window !== "undefined") {
   throw new Error(
@@ -93,6 +94,7 @@ function adminApp(): App {
 export const adminDb = () => getFirestore(adminApp());
 export const adminAuth = () => getAuth(adminApp());
 export const adminBucket = () => getStorage(adminApp()).bucket();
+export const adminMessaging = () => getMessaging(adminApp());
 
 /** Mirrors `isFirebaseConfigured` on the client, for server-side branching. */
 export function isAdminConfigured(): boolean {

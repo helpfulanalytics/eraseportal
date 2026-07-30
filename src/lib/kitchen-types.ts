@@ -55,6 +55,8 @@ export interface Person {
    * folder in their organization, not just this one.
    */
   folderId?: string;
+  /** Push notification tokens for desktop notifications. */
+  fcmTokens?: string[];
 }
 
 /**

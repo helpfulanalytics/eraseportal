@@ -243,6 +243,7 @@ export async function getInbox(): Promise<InboxEntry[]> {
 export async function getRecentMessages(opts: {
   organizationId?: string;
   limit?: number;
+  excludeAuthorId?: string;
 }): Promise<InboxMessage[]> {
   const limit = opts.limit ?? 40;
 
@@ -273,6 +274,10 @@ export async function getRecentMessages(opts: {
 
   const rows: InboxMessage[] = [];
   for (const message of messages) {
+    if (opts.excludeAuthorId && message.authorId === opts.excludeAuthorId) {
+      continue;
+    }
+
     const conversation = inScope.get(message.conversationId);
     if (!conversation) continue;
 
@@ -304,6 +309,7 @@ export async function getRecentMessages(opts: {
 export async function getRecentActivity(opts: {
   organizationId?: string;
   limit?: number;
+  excludeAuthorId?: string;
 }): Promise<InboxActivity[]> {
   const limit = opts.limit ?? 40;
 
@@ -318,6 +324,7 @@ export async function getRecentActivity(opts: {
 
   return items
     .filter((item) => folderName.has(item.folderId))
+    .filter((item) => !opts.excludeAuthorId || item.authorId !== opts.excludeAuthorId)
     .slice(0, limit)
     .map((item) => ({
       id: item.id,
@@ -839,6 +846,24 @@ export async function setPersonProfile(
   if (Object.keys(updates).length === 0) return;
 
   await adminDb().collection(COLLECTIONS.people).doc(personId).set(updates, { merge: true });
+}
+
+export async function addDeviceToken(personId: string, token: string): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.people)
+    .doc(personId)
+    .update({
+      fcmTokens: FieldValue.arrayUnion(token),
+    });
+}
+
+export async function removeDeviceToken(personId: string, token: string): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.people)
+    .doc(personId)
+    .update({
+      fcmTokens: FieldValue.arrayRemove(token),
+    });
 }
 
 /**

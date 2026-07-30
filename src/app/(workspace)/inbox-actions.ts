@@ -48,15 +48,15 @@ export async function loadInboxAction(
   orgSlug: string,
   tab: InboxTab,
 ): Promise<InboxPayload> {
-  const { organizationId, folderIds, folders } = await requireInboxScope(orgSlug);
+  const { me, organizationId, folderIds, folders } = await requireInboxScope(orgSlug);
   const folderNames = new Map(folders.map((folder) => [folder.id, folder.name]));
 
   switch (tab) {
     case "chats":
-      return { tab, rows: await getRecentMessages({ organizationId, limit: PAGE }) };
+      return { tab, rows: await getRecentMessages({ organizationId, limit: PAGE, excludeAuthorId: me.id }) };
 
     case "updates":
-      return { tab, rows: await getRecentActivity({ organizationId, limit: PAGE }) };
+      return { tab, rows: await getRecentActivity({ organizationId, limit: PAGE, excludeAuthorId: me.id }) };
 
     case "tasks": {
       // A task's `folderId` is optional — an unfiled task belongs to the

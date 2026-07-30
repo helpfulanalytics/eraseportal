@@ -20,6 +20,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/lib/firebase/auth-actions";
+import { requestNotificationPermission } from "@/lib/firebase/messaging";
+import { registerDeviceTokenAction } from "@/app/(workspace)/actions";
 
 export function UserMenu() {
   const currentUser = useCurrentUser();
@@ -43,6 +45,26 @@ export function UserMenu() {
     }
   };
 
+  const [requestingNotification, setRequestingNotification] = useState(false);
+  const onEnableNotifications = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setRequestingNotification(true);
+    try {
+      const token = await requestNotificationPermission();
+      if (token) {
+        await registerDeviceTokenAction(token);
+        alert("Notifications enabled successfully!");
+      } else {
+        alert("Could not enable notifications. Please check your browser permissions or Firebase config.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("An error occurred.");
+    } finally {
+      setRequestingNotification(false);
+    }
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -62,6 +84,14 @@ export function UserMenu() {
               {currentUser.email}
             </span>
           </DropdownMenuLabel>
+        </DropdownMenuGroup>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuGroup>
+          <DropdownMenuItem disabled={requestingNotification} onClick={onEnableNotifications}>
+            {requestingNotification ? "Enabling..." : "Enable Notifications"}
+          </DropdownMenuItem>
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />

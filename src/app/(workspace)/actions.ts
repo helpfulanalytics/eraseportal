@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 import {
   addBoardColumn,
   addCardComment,
+  addDeviceToken,
   createBoard,
   createCard,
   createClient,
@@ -47,6 +48,7 @@ import {
   getTasks,
   markInviteUsed,
   moveCard,
+  removeDeviceToken,
   renameBoard,
   renameBoardColumn,
   renameConversation,
@@ -78,6 +80,7 @@ import type {
   Person,
   Reaction,
 } from "@/lib/kitchen-types";
+import { adminMessaging } from "@/lib/firebase/admin";
 import { sendEmail } from "@/lib/email/resend";
 
 /** Every mutation needs an identity; none of them accept one as input. */
@@ -196,6 +199,42 @@ export async function sendMessageAction(
               <p><a href="${SITE_URL}">Open it</a></p>
             `,
           });
+
+          // Desktop Notification
+          if (recipient.fcmTokens && recipient.fcmTokens.length > 0) {
+            try {
+              const response = await adminMessaging().sendEachForMulticast({
+                tokens: recipient.fcmTokens,
+                notification: {
+                  title: `${me.name} in ${conversation.name}`,
+                  body: trimmed,
+                },
+                data: {
+                  url: `${SITE_URL}/w/${conversation.organizationId ?? ''}/conversations/${conversation.id}`
+                }
+              });
+              
+              // Clean up expired or revoked tokens
+              if (response.failureCount > 0) {
+                const failedTokens: string[] = [];
+                response.responses.forEach((resp, idx) => {
+                  if (!resp.success) {
+                    const errCode = resp.error?.code;
+                    if (errCode === 'messaging/invalid-registration-token' ||
+                        errCode === 'messaging/registration-token-not-registered') {
+                      failedTokens.push(recipient.fcmTokens![idx]);
+                    }
+                  }
+                });
+                
+                await Promise.all(
+                  failedTokens.map(token => removeDeviceToken(recipient.id, token))
+                );
+              }
+            } catch (fcmError) {
+              console.error("Couldn't send push notification:", fcmError);
+            }
+          }
         } catch (cause) {
           console.error("Couldn't send message notification:", cause);
         }
@@ -413,6 +452,21 @@ export async function toggleTaskAction(
             subject: `"${task.title}" was completed`,
             html: `<p>${escapeHtml(me.name)} marked <strong>${escapeHtml(task.title)}</strong> as done.</p>`,
           });
+
+          // Desktop Notification
+          if (author.fcmTokens && author.fcmTokens.length > 0) {
+            try {
+              await adminMessaging().sendEachForMulticast({
+                tokens: author.fcmTokens,
+                notification: {
+                  title: "Task Completed",
+                  body: `${me.name} marked "${task.title}" as done.`,
+                },
+              });
+            } catch (fcmError) {
+              console.error("Couldn't send push notification:", fcmError);
+            }
+          }
         }
       }
     } catch (cause) {
@@ -448,6 +502,21 @@ export async function createTaskAction(input: {
           subject: `${me.name} assigned you a task`,
           html: `<p>${escapeHtml(me.name)} assigned you <strong>${escapeHtml(title)}</strong>.</p>`,
         });
+
+        // Desktop Notification
+        if (assignee.fcmTokens && assignee.fcmTokens.length > 0) {
+          try {
+            await adminMessaging().sendEachForMulticast({
+              tokens: assignee.fcmTokens,
+              notification: {
+                title: "New Task Assigned",
+                body: `${me.name} assigned you: ${title}`,
+              },
+            });
+          } catch (fcmError) {
+            console.error("Couldn't send push notification:", fcmError);
+          }
+        }
       }
     } catch (cause) {
       console.error("Couldn't send task-assigned notification:", cause);
@@ -769,6 +838,11 @@ export async function acceptInviteAction(
 
   await markInviteUsed(invite.id);
   return { organizationSlug: organization.slug, personId: invite.personId };
+}
+
+export async function registerDeviceTokenAction(token: string): Promise<void> {
+  const me = await requireUser();
+  await addDeviceToken(me.id, token);
 }
 
 /**

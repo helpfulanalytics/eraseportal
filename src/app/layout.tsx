@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
+import { DesktopOnlyOverlay } from "@/components/desktop-only-overlay";
 import "./globals.css";
 
 const geistMono = Geist_Mono({
@@ -38,7 +39,10 @@ export default function RootLayout({
       className={`${geistMono.variable} h-full antialiased`}
       style={{ "--font-sans": SANS_STACK } as React.CSSProperties}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <DesktopOnlyOverlay />
+        {children}
+      </body>
     </html>
   );
 }

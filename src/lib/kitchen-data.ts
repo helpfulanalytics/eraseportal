@@ -15,30 +15,40 @@
  */
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminDb } from "./firebase/admin";
+import { adminAuth, adminBucket, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
-import { SWATCH_COLORS } from "./kitchen-format";
+import { docBlocksOf, docPreview, documentKind, newBlockId } from "./doc-blocks";
+import { blockPreview, SWATCH_COLORS } from "./kitchen-format";
 import type {
+  Attachment,
   Block,
   Board,
   BoardCard,
   BoardCardComment,
   BoardColumn,
-  Company,
+  CanvasNode,
   Conversation,
   ConversationFile,
+  DocBlock,
+  DocumentKind,
   Embed,
   Folder,
   FolderAccess,
   FolderItem,
+  InboxActivity,
+  Inline,
   InboxEntry,
+  InboxMessage,
+  Invite,
   ItemKind,
   ItemMeta,
   KDocument,
   LibraryFile,
   Message,
   NavFolder,
+  Organization,
   Person,
+  Reaction,
   Task,
   Template,
   Workspace,
@@ -54,10 +64,11 @@ const COLLECTIONS = {
   boards: "boards",
   documents: "documents",
   embeds: "embeds",
-  companies: "companies",
+  organizations: "organizations",
   templates: "templates",
   tasks: "tasks",
   inbox: "inbox",
+  invites: "invites",
 } as const;
 
 /** The single workspace this deployment serves. Matches WORKSPACE in the seed. */
@@ -128,14 +139,52 @@ export async function getEmbed(id: string): Promise<Embed | undefined> {
   return one<Embed>(COLLECTIONS.embeds, id);
 }
 
-export async function getCompany(id: string): Promise<Company | undefined> {
-  return one<Company>(COLLECTIONS.companies, id);
+/**
+ * One message by id. Reactions act on a message directly, so the action has
+ * nothing but the id to check access with — it reads this, then the
+ * conversation, then the folder.
+ */
+export async function getMessage(id: string): Promise<Message | undefined> {
+  return one<Message>(COLLECTIONS.messages, id);
+}
+
+export async function getOrganization(id: string): Promise<Organization | undefined> {
+  return one<Organization>(COLLECTIONS.organizations, id);
+}
+
+/** The org's workspace portal is reached by slug, not id — `/w/{slug}`. */
+export async function getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
+  const matches = await many<Organization>(
+    collection(COLLECTIONS.organizations).where("slug", "==", slug).limit(1),
+  );
+  return matches[0];
 }
 
 /* ---- collections ----------------------------------------------------- */
 
-export async function getFolders(): Promise<Folder[]> {
-  return many<Folder>(collection(COLLECTIONS.folders).orderBy("name"));
+/**
+ * Unfiltered when called with no `opts` (members see every organization's
+ * folders). Pass `opts` — even `{ organizationId: undefined }`, e.g. a
+ * client somehow missing one — to scope to one tenant; a client with no
+ * `organizationId` correctly gets back nothing rather than every folder in
+ * the workspace.
+ *
+ * The scoped query sorts in memory rather than via `.orderBy("name")`:
+ * an equality filter plus an order-by on a *different* field needs a
+ * composite index (see the `messages` index in firestore.indexes.json for
+ * the same situation), and this avoids requiring a new one just for
+ * organization-scoped folder lists.
+ */
+export async function getFolders(opts?: { organizationId?: string }): Promise<Folder[]> {
+  if (opts === undefined) {
+    return many<Folder>(collection(COLLECTIONS.folders).orderBy("name"));
+  }
+  if (!opts.organizationId) return [];
+
+  const folders = await many<Folder>(
+    collection(COLLECTIONS.folders).where("organizationId", "==", opts.organizationId),
+  );
+  return folders.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -154,8 +203,8 @@ export async function getClients(): Promise<Person[]> {
   );
 }
 
-export async function getCompanies(): Promise<Company[]> {
-  return many<Company>(collection(COLLECTIONS.companies).orderBy("name"));
+export async function getOrganizations(): Promise<Organization[]> {
+  return many<Organization>(collection(COLLECTIONS.organizations).orderBy("name"));
 }
 
 export async function getTemplates(): Promise<Template[]> {
@@ -172,6 +221,116 @@ export async function getInbox(): Promise<InboxEntry[]> {
   );
 }
 
+/* ---- inbox views ------------------------------------------------------ */
+
+/**
+ * The newest messages across every conversation in one organization —
+ * what the Inbox's Chats tab lists.
+ *
+ * Scoping happens in memory rather than in the query. A message carries only
+ * `conversationId`; the organization boundary lives two joins away, on the
+ * conversation's folder, and Firestore can't express that. So this reads a
+ * window of recent messages globally, then keeps the ones whose conversation
+ * belongs to a folder in scope. The window is deliberately several times the
+ * requested count: if another organization is noisy, its messages eat into
+ * the window, and over-fetching is what stops the tab looking empty. It is
+ * the same trade `getLibraryFiles` makes, and the first thing to fix by
+ * denormalising `organizationId` onto `messages` if the workspace grows.
+ *
+ * `.limit()` keeps that window bounded, and `orderBy("createdAt")` on its own
+ * needs no composite index — single-field indexes are automatic.
+ */
+export async function getRecentMessages(opts: {
+  organizationId?: string;
+  limit?: number;
+}): Promise<InboxMessage[]> {
+  const limit = opts.limit ?? 40;
+
+  const [messages, conversations, folders, people] = await Promise.all([
+    many<Message>(
+      collection(COLLECTIONS.messages)
+        .orderBy("createdAt", "desc")
+        .limit(limit * 5),
+    ),
+    many<Conversation>(collection(COLLECTIONS.conversations)),
+    getFolders(opts.organizationId ? { organizationId: opts.organizationId } : undefined),
+    getPeople(),
+  ]);
+
+  const folderName = new Map(folders.map((f) => [f.id, f.name]));
+  const inScope = new Map(
+    conversations
+      .filter((c) => folderName.has(c.folderId))
+      .map((c) => [c.id, c]),
+  );
+
+  // Resolved here rather than at render: `blockPreview` needs the handle for
+  // every @mention, and the row is a plain string by the time it crosses to
+  // the client.
+  const handles = Object.fromEntries(
+    Object.values(people).map((person) => [person.id, person.handle]),
+  );
+
+  const rows: InboxMessage[] = [];
+  for (const message of messages) {
+    const conversation = inScope.get(message.conversationId);
+    if (!conversation) continue;
+
+    rows.push({
+      id: message.id,
+      conversationId: conversation.id,
+      conversationName: conversation.name,
+      folderId: conversation.folderId,
+      folderName: folderName.get(conversation.folderId) ?? "",
+      authorId: message.authorId,
+      createdAt: message.createdAt,
+      preview: blockPreview(message.body, handles),
+      attachmentCount: message.attachments?.length ?? 0,
+      ...(message.isNote ? { isNote: true } : {}),
+    });
+
+    if (rows.length >= limit) break;
+  }
+
+  return rows;
+}
+
+/**
+ * Recently created folder items — the Updates tab.
+ *
+ * Same in-memory org scoping as `getRecentMessages`, for the same reason:
+ * an `items` row has a `folderId`, not an `organizationId`.
+ */
+export async function getRecentActivity(opts: {
+  organizationId?: string;
+  limit?: number;
+}): Promise<InboxActivity[]> {
+  const limit = opts.limit ?? 40;
+
+  const [items, folders] = await Promise.all([
+    many<FolderItem>(
+      collection(COLLECTIONS.items).orderBy("createdAt", "desc").limit(limit * 5),
+    ),
+    getFolders(opts.organizationId ? { organizationId: opts.organizationId } : undefined),
+  ]);
+
+  const folderName = new Map(folders.map((f) => [f.id, f.name]));
+
+  return items
+    .filter((item) => folderName.has(item.folderId))
+    .slice(0, limit)
+    .map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      name: item.name,
+      folderId: item.folderId,
+      folderName: folderName.get(item.folderId) ?? "",
+      authorId: item.authorId,
+      createdAt: item.createdAt,
+      meta: item.meta,
+    }));
+}
+
 /* ---- relations ------------------------------------------------------- */
 
 /**
@@ -183,14 +342,28 @@ export async function getFolderItems(folderId: string): Promise<FolderItem[]> {
   const folder = await getFolder(folderId);
   if (!folder) return [];
 
-  const items = await many<FolderItem>(
+  const items = await many<FolderItem & { downloadUrl?: string }>(
     collection(COLLECTIONS.items).where("folderId", "==", folderId),
   );
-  const byId = new Map(items.map((i) => [i.id, i]));
+  const byId = new Map(items.map((i) => [i.id, withFileUrl(i)]));
 
   return folder.itemIds
     .map((id) => byId.get(id))
     .filter((i): i is FolderItem => i !== undefined);
+}
+
+/**
+ * Lifts an upload's Storage URL from where `createFolderFile` has always
+ * written it — a top-level `downloadUrl` on the item document, outside the
+ * `FolderItem` type — into `meta.url`, where the listing reads it.
+ *
+ * Doing it on read rather than migrating the documents means files uploaded
+ * before anything rendered them are openable now, with no backfill script.
+ */
+function withFileUrl(item: FolderItem & { downloadUrl?: string }): FolderItem {
+  const { downloadUrl, ...rest } = item;
+  if (rest.meta?.type !== "file" || rest.meta.url || !downloadUrl) return rest;
+  return { ...rest, meta: { ...rest.meta, url: downloadUrl } };
 }
 
 export async function getMessages(conversationId: string): Promise<Message[]> {
@@ -234,8 +407,8 @@ export async function getConversationFiles(
  * Library page ever gets slow.
  */
 export async function getLibraryFiles(): Promise<LibraryFile[]> {
-  const [fileItems, folders, conversations] = await Promise.all([
-    many<FolderItem>(
+  const [rawItems, folders, conversations] = await Promise.all([
+    many<FolderItem & { downloadUrl?: string }>(
       collection(COLLECTIONS.items).where("kind", "==", "file"),
     ),
     getFolders(),
@@ -243,6 +416,9 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
   ]);
 
   const folderName = new Map(folders.map((f) => [f.id, f.name]));
+  // Same lift as `getFolderItems` — the URL has always been written outside
+  // the typed shape.
+  const fileItems = rawItems.map(withFileUrl);
 
   const uploaded = fileItems
     .filter((i) => i.meta.type === "file")
@@ -257,6 +433,8 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
         authorId: i.authorId,
         folderId: i.folderId,
         source: folderName.get(i.folderId) ?? "—",
+        ...(meta.url ? { url: meta.url } : {}),
+        ...(meta.mime ? { mime: meta.mime } : {}),
       };
     });
 
@@ -272,6 +450,8 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
           authorId: f.authorId,
           folderId: conv.folderId,
           source: conv.name,
+          ...(f.url ? { url: f.url } : {}),
+          ...(f.mime ? { mime: f.mime } : {}),
         })),
       ),
     )
@@ -286,9 +466,12 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
  * The sidebar's folder tree, fetched once in the workspace layout and passed
  * down. One query per folder for its conversations — acceptable because the
  * layout result is shared across every route beneath it.
+ *
+ * Pass `organizationId` for a client's session so folders outside their
+ * organization never reach the sidebar at all.
  */
-export async function getNavTree(): Promise<NavFolder[]> {
-  const folders = await getFolders();
+export async function getNavTree(opts?: { organizationId?: string }): Promise<NavFolder[]> {
+  const folders = await getFolders(opts);
   return Promise.all(
     folders.map(async (folder) => {
       // getFolderItems already carries kind + meta for everything (in the
@@ -515,6 +698,8 @@ export async function createFolder(input: {
   description?: string;
   access?: FolderAccess;
   internalRole?: "viewer" | "editor";
+  /** Absent = agency-internal, no client can ever see it. */
+  organizationId?: string;
 }): Promise<Folder> {
   await ensureWorkspace();
 
@@ -531,10 +716,41 @@ export async function createFolder(input: {
     ...(input.access === "internal" && input.internalRole
       ? { internalRole: input.internalRole }
       : {}),
+    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
   };
 
   await doc.set(withoutId(folder));
   return folder;
+}
+
+/**
+ * `acme-inc` from "Acme Inc.", plus a short random suffix so two orgs with
+ * similar names (or a re-created one) don't collide on the same portal path.
+ */
+function slugify(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const suffix = randomUUID().slice(0, 5);
+  return `${base || "org"}-${suffix}`;
+}
+
+export async function createOrganization(input: {
+  name: string;
+  domain: string;
+}): Promise<Organization> {
+  const doc = adminDb().collection(COLLECTIONS.organizations).doc();
+  const organization: Organization = {
+    id: doc.id,
+    name: input.name,
+    domain: input.domain,
+    createdAt: new Date().toISOString(),
+    slug: slugify(input.name),
+  };
+
+  await doc.set(withoutId(organization));
+  return organization;
 }
 
 /**
@@ -545,6 +761,13 @@ export async function createFolder(input: {
  */
 export async function renameFolder(folderId: string, name: string): Promise<void> {
   await adminDb().collection(COLLECTIONS.folders).doc(folderId).update({ name });
+}
+
+export async function renameOrganization(
+  organizationId: string,
+  name: string,
+): Promise<void> {
+  await adminDb().collection(COLLECTIONS.organizations).doc(organizationId).update({ name });
 }
 
 /**
@@ -567,6 +790,24 @@ export async function deleteFolder(folderId: string): Promise<void> {
   await adminDb().collection(COLLECTIONS.folders).doc(folderId).delete();
 }
 
+/**
+ * The folder's own description. Written by the Create Folder dialog since the
+ * beginning and rendered by nothing until the header's description toggle
+ * started showing it.
+ */
+export async function setFolderDescription(
+  folderId: string,
+  description: string,
+): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.folders)
+    .doc(folderId)
+    // Stored as an empty string rather than deleted when cleared: Firestore
+    // rejects `undefined`, and a missing field and an empty one already mean
+    // the same thing to every reader.
+    .update({ description });
+}
+
 /** Like a board's colour, this has one source of truth — no `items` copy to keep in sync. */
 export async function setFolderColor(folderId: string, color: string): Promise<void> {
   await adminDb().collection(COLLECTIONS.folders).doc(folderId).update({ color });
@@ -582,6 +823,22 @@ export async function setFolderColor(folderId: string, color: string): Promise<v
  */
 export async function setFolderCoverUrl(folderId: string, url: string): Promise<void> {
   await adminDb().collection(COLLECTIONS.folders).doc(folderId).update({ coverUrl: url });
+}
+
+/** Client onboarding's name-confirmation + avatar step. */
+export async function setPersonProfile(
+  personId: string,
+  input: { name?: string; avatarUrl?: string },
+): Promise<void> {
+  const updates: Record<string, string> = {};
+  if (input.name) {
+    updates.name = input.name;
+    updates.initials = initialsFrom(input.name);
+  }
+  if (input.avatarUrl) updates.avatarUrl = input.avatarUrl;
+  if (Object.keys(updates).length === 0) return;
+
+  await adminDb().collection(COLLECTIONS.people).doc(personId).set(updates, { merge: true });
 }
 
 /**
@@ -683,11 +940,36 @@ export async function deleteConversation(conversationId: string): Promise<void> 
  * Also bumps the folder item's `messageCount`, since that's denormalised onto
  * the item for the folder listing and would otherwise drift immediately.
  */
+/**
+ * Splits a plain-text paragraph into text and link runs.
+ *
+ * `RichText` has rendered `{ t: "link" }` since the first mock and nothing
+ * ever produced one — a URL someone typed arrived as inert text. The pattern
+ * stops before trailing punctuation so "see https://example.com." doesn't
+ * swallow the full stop into the href.
+ */
+function autolink(text: string): Inline[] {
+  const pattern = /https?:\/\/[^\s<]+[^\s<.,:;"')\]}]/g;
+  const runs: Inline[] = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    if (start > cursor) runs.push({ t: "text", v: text.slice(cursor, start) });
+    runs.push({ t: "link", href: match[0] });
+    cursor = start + match[0].length;
+  }
+
+  if (cursor < text.length) runs.push({ t: "text", v: text.slice(cursor) });
+  return runs.length ? runs : [{ t: "text", v: text }];
+}
+
 export async function sendMessage(input: {
   conversationId: string;
   authorId: string;
   text: string;
   isNote?: boolean;
+  attachments?: Attachment[];
 }): Promise<Message> {
   const db = adminDb();
   const doc = db.collection(COLLECTIONS.messages).doc();
@@ -696,7 +978,7 @@ export async function sendMessage(input: {
     .split(/\n{2,}/)
     .map((chunk) => chunk.trim())
     .filter(Boolean)
-    .map((chunk) => ({ b: "p", children: [{ t: "text", v: chunk }] }));
+    .map((chunk) => ({ b: "p", children: autolink(chunk) }));
 
   const message: Message = {
     id: doc.id,
@@ -705,6 +987,7 @@ export async function sendMessage(input: {
     createdAt: new Date().toISOString(),
     body,
     ...(input.isNote ? { isNote: true } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   };
 
   const batch = db.batch();
@@ -718,6 +1001,106 @@ export async function sendMessage(input: {
   await batch.commit();
 
   return message;
+}
+
+/**
+ * Adds or removes one person's reaction to a message, and returns the
+ * message's reactions afterwards.
+ *
+ * Read-modify-write, like the board's card helpers, and for the same reason:
+ * `reactions` is an array of maps, so there's no field path that can add a
+ * person to the right emoji's `personIds`. `arrayUnion` can't help either —
+ * it matches whole elements, and the element here changes shape as people
+ * join it.
+ *
+ * The whole array is rewritten rather than patched (handoff-2, trap 8), and
+ * an emoji nobody is left reacting with is dropped instead of being left as
+ * an empty pill.
+ */
+export async function toggleReaction(input: {
+  messageId: string;
+  emoji: string;
+  personId: string;
+}): Promise<Reaction[]> {
+  const ref = adminDb().collection(COLLECTIONS.messages).doc(input.messageId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new Error("That message no longer exists.");
+
+  const current = (snapshot.data()?.reactions ?? []) as Reaction[];
+  const existing = current.find((r) => r.emoji === input.emoji);
+
+  let next: Reaction[];
+  if (!existing) {
+    next = [...current, { emoji: input.emoji, personIds: [input.personId] }];
+  } else if (existing.personIds.includes(input.personId)) {
+    const personIds = existing.personIds.filter((id) => id !== input.personId);
+    next = personIds.length
+      ? current.map((r) => (r.emoji === input.emoji ? { ...r, personIds } : r))
+      : current.filter((r) => r.emoji !== input.emoji);
+  } else {
+    next = current.map((r) =>
+      r.emoji === input.emoji
+        ? { ...r, personIds: [...r.personIds, input.personId] }
+        : r,
+    );
+  }
+
+  await ref.update({ reactions: next });
+  return next;
+}
+
+/**
+ * Everything that can be favourited. `starred` lives on the entity's own
+ * document rather than on its `items` row: a folder has no `items` row at
+ * all, so the item table can't be the one place it's kept.
+ */
+export const STARRABLE = {
+  folder: COLLECTIONS.folders,
+  conversation: COLLECTIONS.conversations,
+  board: COLLECTIONS.boards,
+  document: COLLECTIONS.documents,
+  embed: COLLECTIONS.embeds,
+} as const;
+
+export type StarrableKind = keyof typeof STARRABLE;
+
+/**
+ * Stars or unstars anything with a star on its header.
+ *
+ * `Folder.starred` and `Conversation.starred` have been in the model since
+ * the original scan and nothing ever wrote either; board, document and embed
+ * gained the field when the star behind them was wired up.
+ */
+export async function setStarred(
+  kind: StarrableKind,
+  id: string,
+  starred: boolean,
+): Promise<void> {
+  await adminDb().collection(STARRABLE[kind]).doc(id).update({ starred });
+}
+
+/** Clients use this to raise tasks/complaints in their own org's folders. */
+export async function createTask(input: {
+  title: string;
+  folderId?: string;
+  dueDate?: string;
+  assigneeId?: string;
+  authorId: string;
+}): Promise<Task> {
+  const doc = adminDb().collection(COLLECTIONS.tasks).doc();
+  const task: Task = {
+    id: doc.id,
+    title: input.title,
+    status: "todo",
+    completed: false,
+    authorId: input.authorId,
+    ...(input.folderId ? { folderId: input.folderId } : {}),
+    ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+    ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
+  };
+
+  await doc.set(withoutId(task));
+  return task;
 }
 
 export async function setTaskCompleted(
@@ -860,14 +1243,22 @@ export async function deleteBoard(boardId: string): Promise<void> {
   await batch.commit();
 }
 
+/**
+ * Both kinds of document — a page of blocks and a canvas of nodes — are one
+ * collection and one route. Only the body field and the editor differ, so
+ * splitting them would duplicate creation, rename, delete, the folder-item
+ * link and the access check for no gain.
+ */
 export async function createDocument(input: {
   folderId: string;
   name: string;
   authorId: string;
+  kind?: DocumentKind;
 }): Promise<KDocument> {
   const db = adminDb();
   const doc = db.collection(COLLECTIONS.documents).doc();
   const now = new Date().toISOString();
+  const docKind: DocumentKind = input.kind === "canvas" ? "canvas" : "page";
 
   const document: KDocument = {
     id: doc.id,
@@ -875,7 +1266,13 @@ export async function createDocument(input: {
     folderId: input.folderId,
     authorId: input.authorId,
     updatedAt: now,
+    docKind,
     blocks: [],
+    // A page starts with one empty block so the editor has somewhere to put
+    // the caret on first open; a canvas starts genuinely empty.
+    ...(docKind === "canvas"
+      ? { nodes: [] }
+      : { content: [{ id: newBlockId(), type: "text" as const, html: "" }] }),
   };
 
   const batch = db.batch();
@@ -886,11 +1283,177 @@ export async function createDocument(input: {
     name: input.name,
     folderId: input.folderId,
     authorId: input.authorId,
-    meta: { type: "document", updatedAt: now },
+    meta: { type: "document", updatedAt: now, docKind },
   });
   await batch.commit();
 
   return document;
+}
+
+/**
+ * Saves a page document's body.
+ *
+ * `updatedAt` is written twice, like a board's name — once on the document
+ * and once on the `items` row the folder listing reads, which shows
+ * "Updated <date>" without joining back. See trap 10 in handoff-2.
+ *
+ * The legacy `blocks` field is deliberately left untouched: `content` wins
+ * on read once it exists (`docBlocksOf`), and keeping the original means a
+ * seeded document isn't destroyed by the first stray keystroke.
+ */
+export async function saveDocumentContent(
+  documentId: string,
+  content: DocBlock[],
+): Promise<string> {
+  const db = adminDb();
+  const now = new Date().toISOString();
+  const batch = db.batch();
+
+  batch.update(db.collection(COLLECTIONS.documents).doc(documentId), {
+    content,
+    updatedAt: now,
+  });
+  // The folder listing shows the document's first line as its subtitle, and
+  // reads it from here rather than opening every document to render one page.
+  batch.update(db.collection(COLLECTIONS.items).doc(documentId), {
+    "meta.updatedAt": now,
+    "meta.preview": docPreview(content).slice(0, 200),
+  });
+  await batch.commit();
+
+  return now;
+}
+
+/** The canvas equivalent of `saveDocumentContent`. */
+export async function saveDocumentNodes(
+  documentId: string,
+  nodes: CanvasNode[],
+): Promise<string> {
+  const db = adminDb();
+  const now = new Date().toISOString();
+  const batch = db.batch();
+
+  batch.update(db.collection(COLLECTIONS.documents).doc(documentId), {
+    nodes,
+    updatedAt: now,
+  });
+  // A canvas has no first line, so its subtitle counts what's on it.
+  batch.update(db.collection(COLLECTIONS.items).doc(documentId), {
+    "meta.updatedAt": now,
+    "meta.preview": canvasPreview(nodes),
+  });
+  await batch.commit();
+
+  return now;
+}
+
+/** Dual-write name, exactly as `renameBoard` does — see trap 10. */
+export async function renameDocument(documentId: string, name: string): Promise<void> {
+  const db = adminDb();
+  const batch = db.batch();
+  batch.update(db.collection(COLLECTIONS.documents).doc(documentId), { name });
+  batch.update(db.collection(COLLECTIONS.items).doc(documentId), { name });
+  await batch.commit();
+}
+
+/** "3 notes, 1 shape" — what a canvas can say about itself in one line. */
+function canvasPreview(nodes: CanvasNode[]): string {
+  if (nodes.length === 0) return "Empty board";
+
+  const notes = nodes.filter((n) => n.kind === "note").length;
+  const other = nodes.length - notes;
+  const parts: string[] = [];
+  if (notes) parts.push(`${notes} note${notes === 1 ? "" : "s"}`);
+  if (other) parts.push(`${other} object${other === 1 ? "" : "s"}`);
+  return parts.join(", ");
+}
+
+/**
+ * Removes an uploaded file: the item document, its id in the folder's
+ * `itemIds`, and the bytes.
+ *
+ * The Storage object is deleted on a best-effort basis — if the bucket says
+ * no (already gone, or a permission gap), the Firestore rows still go, because
+ * an item pointing at nothing is worse than an unreferenced object.
+ */
+export async function deleteFolderFile(itemId: string): Promise<void> {
+  const db = adminDb();
+  const snapshot = await db.collection(COLLECTIONS.items).doc(itemId).get();
+  if (!snapshot.exists) return;
+
+  const data = snapshot.data() as FolderItem & { storagePath?: string };
+  const batch = db.batch();
+  unlinkItemFromFolder(batch, { id: itemId, folderId: data.folderId });
+  await batch.commit();
+
+  if (data.storagePath) {
+    try {
+      await adminBucket().file(data.storagePath).delete();
+    } catch (cause) {
+      console.error("[storage] couldn't delete", data.storagePath, cause);
+    }
+  }
+}
+
+/**
+ * First lines for documents whose item row has no `preview` yet — everything
+ * saved before the folder listing started showing one.
+ *
+ * One `getAll` for the batch rather than a read per row, and only for the
+ * documents actually missing it, so this costs nothing once a document has
+ * been saved (which writes the preview) and nothing at all for a folder of
+ * boards and files.
+ */
+export async function getDocumentPreviews(
+  ids: string[],
+): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+
+  const db = adminDb();
+  const snapshots = await db.getAll(
+    ...ids.map((id) => db.collection(COLLECTIONS.documents).doc(id)),
+  );
+
+  const previews: Record<string, string> = {};
+  for (const snapshot of snapshots) {
+    const doc = snapshot.data() as KDocument | undefined;
+    if (!doc) continue;
+
+    const preview =
+      documentKind(doc) === "canvas"
+        ? canvasPreview(doc.nodes ?? [])
+        : docPreview(docBlocksOf(doc));
+    if (preview) previews[snapshot.id] = preview.slice(0, 200);
+  }
+  return previews;
+}
+
+/** One item row by id — the folder listing's row menu has nothing else. */
+export async function getFolderItem(id: string): Promise<FolderItem | undefined> {
+  const item = await one<FolderItem & { downloadUrl?: string }>(COLLECTIONS.items, id);
+  return item ? withFileUrl(item) : undefined;
+}
+
+export async function deleteEmbed(embedId: string): Promise<void> {
+  const embed = await getEmbed(embedId);
+  if (!embed) return;
+
+  const db = adminDb();
+  const batch = db.batch();
+  batch.delete(db.collection(COLLECTIONS.embeds).doc(embedId));
+  unlinkItemFromFolder(batch, { id: embedId, folderId: embed.folderId });
+  await batch.commit();
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  const doc = await getDocument(documentId);
+  if (!doc) return;
+
+  const db = adminDb();
+  const batch = db.batch();
+  batch.delete(db.collection(COLLECTIONS.documents).doc(documentId));
+  unlinkItemFromFolder(batch, { id: documentId, folderId: doc.folderId });
+  await batch.commit();
 }
 
 /**
@@ -944,8 +1507,10 @@ export async function createEmbed(input: {
 export async function createClient(input: {
   name: string;
   email: string;
-  /** Set when the create flow was opened from inside a folder. Optional — a
-   * client made from the workspace-wide /clients page has none. */
+  /** The tenant this client belongs to — the actual access boundary. */
+  organizationId: string;
+  /** Set when the create flow was opened from inside a folder. Cosmetic only
+   * (sidebar linkage) — access is governed by `organizationId`. */
   folderId?: string;
 }): Promise<Person> {
   const doc = adminDb().collection(COLLECTIONS.people).doc();
@@ -963,11 +1528,59 @@ export async function createClient(input: {
         ) % PERSON_COLORS.length
       ],
     kind: "client",
+    organizationId: input.organizationId,
     ...(input.folderId ? { folderId: input.folderId } : {}),
   };
 
   await doc.set(withoutId(person));
   return person;
+}
+
+/** A client's invite link is valid for a week. */
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+export async function createInvite(input: {
+  personId: string;
+  organizationId: string;
+  email: string;
+}): Promise<Invite> {
+  const doc = adminDb().collection(COLLECTIONS.invites).doc();
+  const now = new Date();
+  const invite: Invite = {
+    id: doc.id,
+    token: randomUUID(),
+    personId: input.personId,
+    organizationId: input.organizationId,
+    email: input.email,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + INVITE_TTL_MS).toISOString(),
+  };
+
+  await doc.set(withoutId(invite));
+  return invite;
+}
+
+export async function getInviteByToken(token: string): Promise<Invite | undefined> {
+  const matches = await many<Invite>(
+    collection(COLLECTIONS.invites).where("token", "==", token).limit(1),
+  );
+  return matches[0];
+}
+
+/**
+ * Plain function, not a component — the React Compiler lint rule rejects
+ * `Date.now()` reachable from render, so this check lives here rather than
+ * inline in the invite page.
+ */
+export function isInviteExpired(invite: Invite): boolean {
+  return new Date(invite.expiresAt).getTime() < Date.now();
+}
+
+export async function markInviteUsed(inviteId: string): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.invites)
+    .doc(inviteId)
+    .set({ usedAt: new Date().toISOString() }, { merge: true });
 }
 
 /**

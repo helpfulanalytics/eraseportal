@@ -1,6 +1,8 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useState, useTransition } from "react";
+import { renameWorkspaceAction } from "@/app/(workspace)/actions";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardPanel } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,7 +17,7 @@ export function AuthCenteredOnboardingShowcasePage() {
       <div className="relative w-full max-w-sm">
         <Card className="p-7">
           <CardHeader className="flex flex-col items-center gap-4 p-0 text-center">
-            <BrandMark />
+            <BrandMark size={36} />
           </CardHeader>
           <CardPanel className="mt-2 flex flex-col gap-0 p-0">
             <OnboardingFlow />
@@ -41,38 +43,13 @@ function PageBackdrop() {
   );
 }
 
-function BrandMark() {
-  return (
-    <svg
-      viewBox="0 0 40 40"
-      aria-hidden
-      className="size-9"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-    >
-      <circle
-        cx="20"
-        cy="20"
-        r="17"
-        stroke="currentColor"
-        strokeOpacity="0.35"
-        strokeWidth="1"
-        strokeDasharray="2 3"
-      />
-      <rect x="11" y="11" width="18" height="18" rx="3" fill="currentColor" />
-      <path
-        d="M16 22.5c.6.7 1.7 1.2 2.9 1.2 1.5 0 2.6-.7 2.6-1.8 0-1-.7-1.5-2.2-1.8l-.9-.2c-.9-.2-1.3-.5-1.3-1 0-.6.6-1 1.4-1 .9 0 1.5.4 1.7 1l1.4-.5c-.3-1.1-1.4-1.8-3-1.8-1.6 0-2.7.8-2.7 2 0 1 .7 1.6 2.1 1.9l.9.2c.9.2 1.4.5 1.4 1.1 0 .6-.6 1-1.5 1-1 0-1.7-.4-2-1.1l-1.5.6Z"
-        fill="var(--background)"
-      />
-    </svg>
-  );
-}
-
 function OnboardingFlow() {
   const [step, setStep] = useState(0);
   const [workspace, setWorkspace] = useState("");
   const [invitees, setInvitees] = useState<string[]>([]);
   const [pendingEmail, setPendingEmail] = useState("");
+  const [saving, startSaving] = useTransition();
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
   const back = () => setStep((s) => Math.max(s - 1, 0));
@@ -85,10 +62,21 @@ function OnboardingFlow() {
         <WorkspaceStep
           value={workspace}
           onChange={setWorkspace}
+          pending={saving}
+          error={saveError}
           onSubmit={(e) => {
             e.preventDefault();
-            if (!workspace.trim()) return;
-            next();
+            const trimmed = workspace.trim();
+            if (!trimmed) return;
+            setSaveError(null);
+            startSaving(async () => {
+              try {
+                await renameWorkspaceAction(trimmed);
+                next();
+              } catch {
+                setSaveError("Couldn't save that name. Try again.");
+              }
+            });
           }}
         />
       ) : null}
@@ -158,10 +146,14 @@ function WorkspaceStep({
   value,
   onChange,
   onSubmit,
+  pending,
+  error,
 }: {
   value: string;
   onChange: (v: string) => void;
   onSubmit: (e: FormEvent) => void;
+  pending: boolean;
+  error: string | null;
 }) {
   return (
     <div className="text-center">
@@ -181,12 +173,19 @@ function WorkspaceStep({
             autoComplete="off"
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            disabled={pending}
             nativeInput
           />
         </div>
+        {error ? (
+          <p role="alert" className="text-destructive text-xs">
+            {error}
+          </p>
+        ) : null}
         <Button
           type="submit"
           size="lg"
+          loading={pending}
           disabled={!value.trim()}
           className="mt-1 w-full"
         >

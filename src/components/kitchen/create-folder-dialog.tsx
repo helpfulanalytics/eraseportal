@@ -38,12 +38,24 @@ const ACCESS: Array<{
   { value: "internal", icon: Building2Icon, label: "Internal", hint: "Any member invited to your workspace" },
 ];
 
-export function CreateFolderDialog({ onClose }: { onClose: () => void }) {
+export function CreateFolderDialog({
+  organizations,
+  onClose,
+}: {
+  /**
+   * Every folder now lives under its organization's `/w/{slug}` portal, so
+   * there's no "agency internal, no org" option anymore — the picker is
+   * required whenever this dialog can reach more than one org.
+   */
+  organizations: Array<{ id: string; name: string; slug: string }>;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [name, setName] = useState("New folder");
   const [description, setDescription] = useState("");
   const [access, setAccess] = useState<FolderAccess>("private");
   const [internalRole, setInternalRole] = useState<"viewer" | "editor">("viewer");
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const nameRef = useRef<HTMLInputElement>(null);
@@ -57,7 +69,7 @@ export function CreateFolderDialog({ onClose }: { onClose: () => void }) {
 
   const save = () => {
     const trimmed = name.trim();
-    if (!trimmed || pending) return;
+    if (!trimmed || pending || !organizationId) return;
     setError(null);
 
     startTransition(async () => {
@@ -67,9 +79,11 @@ export function CreateFolderDialog({ onClose }: { onClose: () => void }) {
           description,
           access,
           internalRole,
+          organizationId,
         });
         onClose();
-        router.push(`/folders/${id}`);
+        const slug = organizations.find((o) => o.id === organizationId)?.slug;
+        router.push(`/w/${slug}/folders/${id}`);
       } catch {
         setError("Couldn't create that folder.");
       }
@@ -88,7 +102,7 @@ export function CreateFolderDialog({ onClose }: { onClose: () => void }) {
       title="Create Folder"
       onClose={onClose}
       onSubmit={save}
-      canSubmit={Boolean(name.trim())}
+      canSubmit={Boolean(name.trim()) && Boolean(organizationId)}
       pending={pending}
       error={error}
     >
@@ -119,6 +133,29 @@ export function CreateFolderDialog({ onClose }: { onClose: () => void }) {
             className={dialogFieldClass}
           />
         </div>
+
+        {organizations.length > 0 ? (
+          <div>
+            <FieldLabel>Organization</FieldLabel>
+            <select
+              value={organizationId}
+              disabled={pending}
+              aria-label="Organization"
+              onChange={(e) => setOrganizationId(e.target.value)}
+              className={`${dialogFieldClass} bg-background`}
+            >
+              {organizations.map((org) => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="text-k-black-40 text-sm">
+            Create an organization first — every folder belongs to one.
+          </p>
+        )}
       </div>
 
       <div className="mt-5 border-k-black-06 border-t px-6 pt-4">

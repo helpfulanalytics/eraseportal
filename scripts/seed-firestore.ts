@@ -14,7 +14,6 @@
 import { adminDb } from "../src/lib/firebase/admin";
 import {
   BOARDS,
-  COMPANIES,
   CONVERSATIONS,
   DOCUMENTS,
   EMBEDS,
@@ -22,6 +21,7 @@ import {
   FOLDER_ITEMS,
   INBOX,
   MESSAGES,
+  ORGANIZATIONS,
   PEOPLE,
   TASKS,
   TEMPLATES,
@@ -103,7 +103,7 @@ async function main() {
     (await seed("boards", BOARDS)) +
     (await seed("documents", DOCUMENTS)) +
     (await seed("embeds", EMBEDS)) +
-    (await seed("companies", COMPANIES)) +
+    (await seed("organizations", ORGANIZATIONS)) +
     (await seed("templates", TEMPLATES)) +
     (await seed("tasks", TASKS)) +
     (await seed("inbox", INBOX));

@@ -12,7 +12,7 @@
 import type {
   Block,
   Board,
-  Company,
+  Organization,
   Conversation,
   Embed,
   Folder,
@@ -59,6 +59,7 @@ export const PEOPLE: Record<string, Person> = {
     initials: "CR",
     color: "var(--k-blue)",
     kind: "client",
+    organizationId: "cmp_cardflow",
   },
 };
 
@@ -71,6 +72,7 @@ export const FOLDERS: Folder[] = [
     name: "CardFlowFinancial",
     url: "https://www.cardflowfinancial.com/",
     starred: false,
+    organizationId: "cmp_cardflow",
     itemIds: [
       "convr_fd4e534129a61d43acf7e435",
       "brd_9f2c4a71e08d",
@@ -733,13 +735,13 @@ export const EMBEDS: Embed[] = [
   },
 ];
 
-export const COMPANIES: Company[] = [
+export const ORGANIZATIONS: Organization[] = [
   {
     id: "cmp_cardflow",
     name: "CardFlow Financial",
     domain: "cardflowfinancial.com",
-    clientIds: ["chelsea"],
     createdAt: "2026-03-26",
+    slug: "cardflow-financial",
   },
 ];
 

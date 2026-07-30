@@ -8,12 +8,13 @@ import {
   MoreHorizontalIcon,
   PanelLeftIcon,
   SettingsIcon,
-  UsersIcon,
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { BrandMark } from "@/components/brand-mark";
+import { useOrgSlug } from "@/components/workspace-provider";
 import { cn } from "@/lib/utils";
 
 /** Lucide icons and the hand-rolled glyphs below share this shape. */
@@ -27,25 +28,6 @@ interface RailItem {
   /** Match on prefix rather than equality for sections with child routes. */
   match?: (pathname: string) => boolean;
 }
-
-const ITEMS: RailItem[] = [
-  {
-    key: "home",
-    href: "/",
-    icon: HomeGlyph,
-    label: "Home",
-    match: (p) => p === "/" || p.startsWith("/folders") || p.startsWith("/conversations"),
-  },
-  { key: "inbox", href: "/inbox", icon: InboxIcon, label: "Inbox" },
-  { key: "clients", href: "/clients", icon: UsersIcon, label: "Clients" },
-  {
-    key: "tasks",
-    href: "/tasks",
-    icon: CheckSquareIcon,
-    label: "Tasks",
-    match: (p) => p.startsWith("/tasks"),
-  },
-];
 
 /** Lucide has no house glyph matching the outline weight used here. */
 function HomeGlyph({ className }: { className?: string }) {
@@ -69,12 +51,35 @@ function HomeGlyph({ className }: { className?: string }) {
 export function IconRail({
   onToggleSidebar,
   sidebarOpen,
+  inboxOpen,
+  onToggleInbox,
 }: {
   onToggleSidebar: () => void;
   sidebarOpen: boolean;
+  inboxOpen: boolean;
+  onToggleInbox: () => void;
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const orgSlug = useOrgSlug();
+  const orgHome = `/w/${orgSlug}`;
+
+  const items: RailItem[] = [
+    {
+      key: "home",
+      href: orgHome,
+      icon: HomeGlyph,
+      label: "Home",
+      match: (p) => p === orgHome || p.startsWith(`${orgHome}/folders`) || p.startsWith(`${orgHome}/conversations`),
+    },
+    {
+      key: "tasks",
+      href: `${orgHome}/tasks`,
+      icon: CheckSquareIcon,
+      label: "Tasks",
+      match: (p) => p.startsWith(`${orgHome}/tasks`),
+    },
+  ];
 
   return (
     <nav
@@ -82,14 +87,14 @@ export function IconRail({
       className="relative z-30 flex w-rail shrink-0 flex-col items-center gap-1 py-3"
     >
       <Link
-        href="/"
+        href={orgHome}
         aria-label="Workspace home"
         className="mb-3 flex size-10 items-center justify-center rounded-full text-k-black-84 transition-colors hover:bg-k-black-04"
       >
-        <ChefHatGlyph className="size-7" />
+        <BrandMark size={28} />
       </Link>
 
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         const active = item.match ? item.match(pathname) : pathname === item.href;
         return (
           <RailButton
@@ -103,6 +108,20 @@ export function IconRail({
         );
       })}
 
+      {/*
+        Inbox is the one rail entry that isn't a destination. It swaps the left
+        panel and leaves the page alone, so it's a button with `aria-expanded`
+        rather than a link with `aria-current` — pressing it never changes the
+        URL, and the conversation you open from it lands in the card beside it.
+      */}
+      <RailButton
+        icon={InboxIcon}
+        label="Inbox"
+        active={inboxOpen}
+        aria-expanded={inboxOpen}
+        onClick={onToggleInbox}
+      />
+
       <div className="relative">
         <RailButton
           icon={MoreHorizontalIcon}
@@ -111,7 +130,7 @@ export function IconRail({
           onClick={() => setMoreOpen((v) => !v)}
         />
         {moreOpen ? (
-          <MorePanel onClose={() => setMoreOpen(false)} />
+          <MorePanel orgHome={orgHome} onClose={() => setMoreOpen(false)} />
         ) : null}
       </div>
 
@@ -119,18 +138,24 @@ export function IconRail({
         <button
           type="button"
           onClick={onToggleSidebar}
-          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-          aria-pressed={sidebarOpen}
+          aria-label={
+            inboxOpen
+              ? "Close inbox"
+              : sidebarOpen
+                ? "Collapse sidebar"
+                : "Expand sidebar"
+          }
+          aria-pressed={sidebarOpen || inboxOpen}
           className="flex size-9 items-center justify-center rounded-lg text-k-black-56 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
         >
           <PanelLeftIcon className="size-[18px]" strokeWidth={1.6} />
         </button>
         <RailButton
           as={Link}
-          href="/settings"
+          href={`${orgHome}/settings`}
           icon={SettingsIcon}
           label="Settings"
-          active={pathname.startsWith("/settings")}
+          active={pathname.startsWith(`${orgHome}/settings`)}
         />
       </div>
     </nav>
@@ -157,8 +182,12 @@ function RailButton({
   return (
     <Comp
       {...props}
-      {...(Comp === "button" ? { type: "button" } : {})}
-      aria-current={active ? "page" : undefined}
+      {...(Comp === "button"
+        ? { type: "button" }
+        : // `aria-current="page"` is a claim about the URL, so only a rail
+          // entry that navigates gets to make it. The Inbox toggle says
+          // `aria-expanded` instead, which is what it actually does.
+          { "aria-current": active ? "page" : undefined })}
       className="group flex w-14 flex-col items-center gap-0.5 py-0.5"
     >
       <span
@@ -184,7 +213,7 @@ function RailButton({
 }
 
 /** `More` opens a titled panel with its own close affordance, not a menu. */
-function MorePanel({ onClose }: { onClose: () => void }) {
+function MorePanel({ orgHome, onClose }: { orgHome: string; onClose: () => void }) {
   return (
     <div className="absolute bottom-0 left-[calc(100%+4px)] z-50 w-80 rounded-2xl bg-background p-2 shadow-popover">
       <div className="flex items-center justify-between px-2 py-1">
@@ -209,7 +238,7 @@ function MorePanel({ onClose }: { onClose: () => void }) {
       </div>
       <div className="mx-2 my-1 h-px bg-k-black-06" />
       <Link
-        href="/templates"
+        href={`${orgHome}/templates`}
         onClick={onClose}
         className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-k-black-03"
       >
@@ -224,24 +253,5 @@ function MorePanel({ onClose }: { onClose: () => void }) {
         </span>
       </Link>
     </div>
-  );
-}
-
-function ChefHatGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 32 32"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8.5 19.5a5.5 5.5 0 0 1-1.2-10.9 5.2 5.2 0 0 1 9.7-2.6 5.2 5.2 0 0 1 9.7 2.6 5.5 5.5 0 0 1-1.2 10.9" />
-      <path d="M8.5 19.5v4.8c0 .8.7 1.5 1.5 1.5h12c.8 0 1.5-.7 1.5-1.5v-4.8z" />
-      <path d="M8.5 22.3h15" />
-    </svg>
   );
 }

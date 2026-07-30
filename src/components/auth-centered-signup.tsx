@@ -2,10 +2,11 @@
 
 import { type FormEvent, useState } from "react";
 import Link from "next/link";
+import { motion, type Variants } from "motion/react";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { authErrorMessage, signUp } from "@/lib/firebase/auth-actions";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardPanel } from "@/components/ui/card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,33 +14,60 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Separator } from "@/components/ui/separator";
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06, delayChildren: 0.1 },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 340, damping: 28 },
+  },
+};
 
 export function AuthCenteredSignupShowcasePage() {
   return (
-    <div className="relative flex min-h-svh items-center justify-center bg-background px-4 py-12 text-foreground">
+    <div className="relative flex min-h-svh w-full flex-col bg-background text-foreground">
       <PageBackdrop />
-      <div className="relative w-full max-w-sm">
-        <Card className="p-7">
-          <CardHeader className="flex flex-col items-center gap-4 p-0 text-center">
-            <BrandMark />
-            <div className="flex flex-col gap-1.5">
-              <h1 className="font-heading text-2xl tracking-tight">
-                Create your account
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                Set up your scratchpad in a minute
-              </p>
-            </div>
-          </CardHeader>
 
-          <CardPanel className="mt-6 flex flex-col gap-5 p-0">
-            <OAuthRow />
-            <OrSeparator />
-            <SignUpForm />
-            <FooterLinks />
-          </CardPanel>
-        </Card>
+      <div className="relative p-5 md:p-8">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 rounded-md transition-opacity duration-200 hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <BrandMark size={24} />
+          <span className="font-heading text-base font-semibold tracking-tight">
+            Erase Friction Portal
+          </span>
+        </Link>
+      </div>
+
+      <div className="relative flex flex-1 items-center justify-center px-6 pb-16 md:px-10">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="w-full max-w-sm"
+        >
+          <motion.div variants={itemVariants} className="mb-7">
+            <h1 className="font-heading text-2xl font-bold tracking-tight">
+              Create your account
+            </h1>
+            <p className="mt-1.5 text-muted-foreground text-sm">
+              Set up your workspace in a minute
+            </p>
+          </motion.div>
+
+          <SignUpForm />
+          <FooterLinks />
+        </motion.div>
       </div>
     </div>
   );
@@ -57,60 +85,6 @@ function PageBackdrop() {
         ].join(", "),
       }}
     />
-  );
-}
-
-function BrandMark() {
-  return (
-    <svg
-      viewBox="0 0 40 40"
-      aria-hidden
-      className="size-9"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-    >
-      <circle
-        cx="20"
-        cy="20"
-        r="17"
-        stroke="currentColor"
-        strokeOpacity="0.35"
-        strokeWidth="1"
-        strokeDasharray="2 3"
-      />
-      <rect x="11" y="11" width="18" height="18" rx="3" fill="currentColor" />
-      <path
-        d="M16 22.5c.6.7 1.7 1.2 2.9 1.2 1.5 0 2.6-.7 2.6-1.8 0-1-.7-1.5-2.2-1.8l-.9-.2c-.9-.2-1.3-.5-1.3-1 0-.6.6-1 1.4-1 .9 0 1.5.4 1.7 1l1.4-.5c-.3-1.1-1.4-1.8-3-1.8-1.6 0-2.7.8-2.7 2 0 1 .7 1.6 2.1 1.9l.9.2c.9.2 1.4.5 1.4 1.1 0 .6-.6 1-1.5 1-1 0-1.7-.4-2-1.1l-1.5.6Z"
-        fill="var(--background)"
-      />
-    </svg>
-  );
-}
-
-function OAuthRow() {
-  return (
-    <div className="grid grid-cols-2 gap-2.5">
-      <Button variant="outline" type="button">
-        <GitHubIcon />
-        GitHub
-      </Button>
-      <Button variant="outline" type="button">
-        <GoogleIcon />
-        Google
-      </Button>
-    </div>
-  );
-}
-
-function OrSeparator() {
-  return (
-    <div className="flex items-center gap-3">
-      <Separator className="flex-1" />
-      <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-[0.3em]">
-        Or continue with email
-      </span>
-      <Separator className="flex-1" />
-    </div>
   );
 }
 
@@ -144,63 +118,69 @@ function SignUpForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <Field>
-        <FieldLabel htmlFor="signup-name">Full name</FieldLabel>
-        <Input
-          id="signup-name"
-          type="text"
-          required
-          placeholder="Jane Doe"
-          autoComplete="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          nativeInput
-        />
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor="signup-email">Email</FieldLabel>
-        <Input
-          id="signup-email"
-          type="email"
-          required
-          placeholder="you@example.com"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          nativeInput
-        />
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor="signup-password">Password</FieldLabel>
-        <InputGroup>
-          <InputGroupInput
-            id="signup-password"
-            type={reveal ? "text" : "password"}
+      <motion.div variants={itemVariants}>
+        <Field>
+          <FieldLabel htmlFor="signup-name">Full name</FieldLabel>
+          <Input
+            id="signup-name"
+            type="text"
             required
-            placeholder="Create a password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Jane Doe"
+            autoComplete="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             nativeInput
           />
-          <InputGroupAddon align="inline-end">
-            <button
-              type="button"
-              onClick={() => setReveal((v) => !v)}
-              aria-label={reveal ? "Hide password" : "Show password"}
-              className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {reveal ? (
-                <EyeOffIcon className="size-4" />
-              ) : (
-                <EyeIcon className="size-4" />
-              )}
-            </button>
-          </InputGroupAddon>
-        </InputGroup>
-      </Field>
+        </Field>
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <Field>
+          <FieldLabel htmlFor="signup-email">Email</FieldLabel>
+          <Input
+            id="signup-email"
+            type="email"
+            required
+            placeholder="you@example.com"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            nativeInput
+          />
+        </Field>
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <Field>
+          <FieldLabel htmlFor="signup-password">Password</FieldLabel>
+          <InputGroup>
+            <InputGroupInput
+              id="signup-password"
+              type={reveal ? "text" : "password"}
+              required
+              placeholder="Create a password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              nativeInput
+            />
+            <InputGroupAddon align="inline-end">
+              <button
+                type="button"
+                onClick={() => setReveal((v) => !v)}
+                aria-label={reveal ? "Hide password" : "Show password"}
+                className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {reveal ? (
+                  <EyeOffIcon className="size-4" />
+                ) : (
+                  <EyeIcon className="size-4" />
+                )}
+              </button>
+            </InputGroupAddon>
+          </InputGroup>
+        </Field>
+      </motion.div>
 
       {error ? (
         <p role="alert" className="text-destructive text-xs">
@@ -208,53 +188,27 @@ function SignUpForm() {
         </p>
       ) : null}
 
-      <Button type="submit" size="lg" loading={pending} className="mt-1 w-full">
-        Create account
-      </Button>
+      <motion.div variants={itemVariants}>
+        <Button type="submit" size="lg" loading={pending} className="mt-1 w-full">
+          Create account
+        </Button>
+      </motion.div>
     </form>
   );
 }
 
 function FooterLinks() {
   return (
-    <div className="flex items-center justify-center gap-4 text-xs">
+    <motion.div
+      variants={itemVariants}
+      className="mt-6 flex items-center justify-center gap-4 text-xs"
+    >
       <p className="text-muted-foreground">
         Already have an account?{" "}
         <Link href="/sign-in" className="text-foreground hover:underline">
           Sign in
         </Link>
       </p>
-    </div>
-  );
-}
-
-function GitHubIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden fill="currentColor" className="size-4">
-      <path d="M12 .5C5.7.5.6 5.6.6 11.9c0 5 3.3 9.3 7.8 10.8.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.8-1.6-2.5-.3-5.2-1.3-5.2-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2 1-.3 2-.4 3-.4s2 .1 3 .4c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.2 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.5-1.5 7.8-5.8 7.8-10.8C23.4 5.6 18.3.5 12 .5Z" />
-    </svg>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden className="size-4">
-      <path
-        fill="#EA4335"
-        d="M12 5c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1.5 15 .5 12 .5 7.3.5 3.3 3.2 1.4 7.1l3.8 3c.9-2.8 3.5-4.6 6.8-4.6Z"
-      />
-      <path
-        fill="#34A853"
-        d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.7-2.4 3.6l3.7 2.9c2.2-2 3.7-5 3.7-8.6Z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M5.2 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1l-3.8-3C.5 8.7 0 10.3 0 12s.5 3.3 1.4 4.7l3.8-2.6Z"
-      />
-      <path
-        fill="#4285F4"
-        d="M12 23.5c3.2 0 5.9-1.1 7.9-2.9l-3.7-2.9c-1 .7-2.4 1.2-4.2 1.2-3.3 0-6-2-6.9-4.6l-3.8 3C3.3 20.8 7.3 23.5 12 23.5Z"
-      />
-    </svg>
+    </motion.div>
   );
 }

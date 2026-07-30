@@ -32,6 +32,7 @@ const PUBLIC_PREFIXES = [
   "/sign-up",
   "/reset-password",
   "/onboarding",
+  "/invite",
 ];
 
 function isPublic(pathname: string): boolean {

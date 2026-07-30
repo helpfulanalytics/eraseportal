@@ -79,6 +79,7 @@
 
   /* accents — state only, never decoration */
   --k-blue: #0165e1;
+  --k-blue-04: #0165e10a;
   --k-blue-06: #0165e10f;
   --k-blue-08: #0165e114;
   --k-blue-12: #0165e11f;
@@ -211,8 +212,19 @@
   --color-card: var(--card);
   --color-destructive-foreground: var(--destructive-foreground);
 
-  /* Expose the raw palette to utilities: bg-k-blue, text-k-black-56, … */
+  /*
+   * Expose the raw palette to utilities: bg-k-blue, text-k-black-56, …
+   *
+   * A token defined in `:root` above but missing from this block produces a
+   * class that Tailwind never generates — `hover:bg-k-black-02` sat on every
+   * table row, card and menu item in the app doing nothing at all, and the
+   * task and label pills lost their tints the same way. Same silent failure
+   * mode as the tailwind-merge font-size trap: no error, the style just
+   * isn't there. **Add the `--color-k-*` line whenever you add a `--k-*`
+   * one**, or the class won't exist.
+   */
   --color-k-black: var(--k-black);
+  --color-k-black-02: var(--k-black-02);
   --color-k-black-03: var(--k-black-03);
   --color-k-black-04: var(--k-black-04);
   --color-k-black-05: var(--k-black-05);
@@ -246,6 +258,7 @@
   --color-k-gray-ad: var(--k-gray-ad);
   --color-k-gray-b2: var(--k-gray-b2);
   --color-k-blue: var(--k-blue);
+  --color-k-blue-04: var(--k-blue-04);
   --color-k-blue-06: var(--k-blue-06);
   --color-k-blue-08: var(--k-blue-08);
   --color-k-blue-12: var(--k-blue-12);
@@ -254,12 +267,16 @@
   --color-k-blue-32: var(--k-blue-32);
   --color-k-red: var(--k-red);
   --color-k-red-08: var(--k-red-08);
+  --color-k-red-d3: var(--k-red-d3);
   --color-k-yellow: var(--k-yellow);
   --color-k-yellow-08: var(--k-yellow-08);
   --color-k-yellow-16: var(--k-yellow-16);
+  --color-k-yellow-23: var(--k-yellow-23);
   --color-k-green: var(--k-green);
   --color-k-green-0e: var(--k-green-0e);
+  --color-k-green-23: var(--k-green-23);
   --color-k-purple: var(--k-purple);
+  --color-k-purple-20: var(--k-purple-20);
   --color-k-page: var(--k-page-bg);
 
   /*
@@ -286,6 +303,20 @@
   --text-title--line-height: 38px;
   --text-section: 20px;
   --text-section--line-height: 26px;
+
+  /*
+   * Document-body headings — the second exception to the 14px cap, and only
+   * inside a page document's canvas of blocks. A doc where H1 and body text
+   * are both 14px has no hierarchy to read, and reusing `--text-title` (32px,
+   * a *page* title) would make every heading compete with the document's own
+   * name. Registered in `FONT_SIZES` in lib/utils.ts, like the rest.
+   */
+  --text-h1: 26px;
+  --text-h1--line-height: 32px;
+  --text-h2: 20px;
+  --text-h2--line-height: 26px;
+  --text-h3: 16px;
+  --text-h3--line-height: 22px;
 
   /* radius steps map to Kitchen's integer ladder */
   --radius-xs: var(--k-radius-3);
@@ -322,4 +353,40 @@
   html {
     @apply font-sans;
   }
+}
+
+/*
+ * Block-editor placeholders.
+ *
+ * A `contenteditable` can't take a `placeholder` attribute, and React can't
+ * render a placeholder *node* inside one — anything in there is content the
+ * browser will let someone type into and the editor will save. A pseudo
+ * element is the only text that can sit in a block without being part of it.
+ *
+ * Shown on the focused block, and always on the document's first block, so an
+ * empty document says what to do instead of being a blank rectangle.
+ */
+[data-editable="true"][data-empty="true"]:focus::before,
+[data-editable="true"][data-empty="true"][data-primary="true"]::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  color: var(--k-black-24);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Inline code inside a block, and the canvas's own text nodes. */
+[data-editable="true"] code {
+  border-radius: var(--k-radius-4);
+  background: var(--k-black-04);
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+[data-editable="true"] a {
+  color: var(--k-blue);
+  text-decoration: underline;
 }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    Small master of the mark (see src/components/brand-mark.tsx): gutter 24,
+    no inner fillets, because a tab icon renders at 16-32px. Edge-to-edge on
+    the 256 box rather than optically centred — the browser supplies the
+    padding, and a tab favicon wants every pixel it can get. Fill is literal:
+    currentColor has nothing to inherit from here. #545454 holds up on both
+    light and dark tab strips.
+  -->
+  <g fill="#545454">
+    <path d="M 116 0 C 51.935 0 0 51.935 0 116 L 116 116 Z" />
+    <path d="M 140 0 C 204.065 0 256 51.935 256 116 L 140 116 Z" />
+    <path d="M 116 256 C 51.935 256 0 204.065 0 140 L 116 140 Z" />
+    <path d="M 140 256 L 256 256 L 256 140 L 140 140 Z" />
+  </g>
+</svg>

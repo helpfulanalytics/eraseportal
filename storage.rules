@@ -48,7 +48,15 @@ service firebase.storage {
       allow update: if false;
     }
 
-    // Anything outside those two prefixes is not a path this app writes.
+    // A person's avatar, set during client onboarding.
+    match /people/{personId}/{fileId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && withinSizeLimit() && safeContentType();
+      allow delete: if signedIn();
+      allow update: if false;
+    }
+
+    // Anything outside those prefixes is not a path this app writes.
     match /{allPaths=**} {
       allow read, write: if false;
     }

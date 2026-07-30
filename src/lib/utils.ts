@@ -21,6 +21,10 @@ const FONT_SIZES = [
   "xl",
   "title",
   "section",
+  // Document-body headings — see the note beside them in globals.css.
+  "h1",
+  "h2",
+  "h3",
 ] as const;
 
 const twMerge = extendTailwindMerge({

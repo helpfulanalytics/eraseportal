@@ -4,11 +4,13 @@ import {
   LayoutTemplateIcon,
   LinkIcon,
   MessageSquareIcon,
-  UserIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { CreateMenu, type Creatable } from "@/components/kitchen/create-menu";
-import { getCurrentUser, getFolders } from "@/lib/kitchen-data";
+import {
+  DashboardProjectGrid,
+  type DashboardCardItem,
+} from "@/components/kitchen/dashboard-project-grid";
+import { getClients, getCurrentUser, getFolders, getOrganizations } from "@/lib/kitchen-data";
 
 /**
  * Each card now creates the thing it names, opening the same panel the
@@ -17,8 +19,12 @@ import { getCurrentUser, getFolders } from "@/lib/kitchen-data";
  * They previously linked to seeded ids — `/boards/brd_9f2c4a71e08d` and
  * friends — which 404'd the moment the workspace was reset. A card that
  * creates is both the intent and the only version that can't go stale.
+ *
+ * Folder/Board/Embed/Document are admin-only (see `requireAdmin` in
+ * actions.ts) — a client sees only the Conversation card, matching what
+ * they're actually allowed to create.
  */
-const CREATE_ACTIONS: Array<{
+const ADMIN_CREATE_ACTIONS: Array<{
   icon: React.ElementType;
   label: string;
   hint: string;
@@ -29,50 +35,79 @@ const CREATE_ACTIONS: Array<{
   { icon: MessageSquareIcon, label: "Conversation", hint: "Discuss anything", creates: "conversation" },
   { icon: LinkIcon, label: "Embed", hint: "Add third-party apps", creates: "embed" },
   { icon: FileTextIcon, label: "Document", hint: "Curate content", creates: "document" },
-  { icon: UserIcon, label: "Client", hint: "Invite clients", creates: "client" },
+];
+
+const CLIENT_CREATE_ACTIONS: Array<{
+  icon: React.ElementType;
+  label: string;
+  hint: string;
+  creates: Creatable;
+}> = [
+  { icon: MessageSquareIcon, label: "Conversation", hint: "Discuss anything", creates: "conversation" },
 ];
 
 export default async function WorkspaceHomePage() {
-  const [me, folders] = await Promise.all([getCurrentUser(), getFolders()]);
+  const me = await getCurrentUser();
+  const isAdmin = me?.kind === "member";
+
+  const [folders, organizations, clients] = await Promise.all([
+    getFolders(
+      isAdmin ? undefined : { organizationId: me?.organizationId },
+    ),
+    isAdmin ? getOrganizations() : Promise.resolve([]),
+    isAdmin ? getClients() : Promise.resolve([]),
+  ]);
+
+  const createActions = isAdmin ? ADMIN_CREATE_ACTIONS : CLIENT_CREATE_ACTIONS;
+  const slugByOrgId = new Map(organizations.map((o) => [o.id, o.slug]));
+  const foldersWithOrgSlug = folders.map((f) => ({
+    id: f.id,
+    name: f.name,
+    organizationSlug: f.organizationId ? slugByOrgId.get(f.organizationId) : undefined,
+  }));
+
+  const dashboardItems: DashboardCardItem[] = isAdmin
+    ? organizations.map((org) => {
+        const folderCount = folders.filter((f) => f.organizationId === org.id).length;
+        const clientCount = clients.filter((c) => c.organizationId === org.id).length;
+        return {
+          id: org.id,
+          href: `/w/${org.slug}`,
+          title: org.name,
+          subtitle: org.domain,
+          meta: `${folderCount} folder${folderCount === 1 ? "" : "s"} · ${clientCount} client${clientCount === 1 ? "" : "s"}`,
+        };
+      })
+    : // A client only reaches this branch if they somehow have no
+      // organizationId — layout.tsx redirects every other client straight
+      // to `/w/[orgSlug]` before this page renders at all. `getFolders`
+      // returns nothing for a missing organizationId, so this is always [].
+      [];
 
   return (
     <div className="px-14 py-12">
       <h1 className="font-semibold text-k-black-84 text-title">
         <span aria-hidden="true">👋</span> Welcome, {me?.name}!
       </h1>
+      <p className="mt-1.5 text-k-black-40 text-md">
+        {isAdmin
+          ? "Every client engagement you're running, in one place."
+          : "Your workspace — jump into a folder to see what's going on."}
+      </p>
 
-      <section className="mt-12">
-        <SectionHeading>Recent Folders</SectionHeading>
-        <ul className="mt-5 flex flex-wrap gap-6">
-          {folders.map((folder) => (
-            <li key={folder.id}>
-              <Link href={`/folders/${folder.id}`} className="group block w-46">
-                <span className="flex h-46 w-46 items-center justify-center rounded-xl bg-k-black-04-solid transition-colors group-hover:bg-k-black-06-solid">
-                  <FolderIcon
-                    className="size-20 fill-k-yellow text-k-yellow"
-                    strokeWidth={1.2}
-                  />
-                </span>
-                <span className="mt-3 block truncate text-k-black-84 text-md">
-                  {folder.name}
-                </span>
-                <span className="block text-k-black-40 text-md">
-                  {folder.itemIds.length} items
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="mt-8">
+        <DashboardProjectGrid isAdmin={isAdmin} items={dashboardItems} />
+      </div>
 
       <section className="mt-12">
         <SectionHeading>Create</SectionHeading>
         <ul className="mt-5 grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4">
-          {CREATE_ACTIONS.map((action) => (
+          {createActions.map((action) => (
             <li key={action.label}>
               <CreateMenu
                 initial={action.creates}
-                folders={folders}
+                folders={foldersWithOrgSlug}
+                organizations={organizations}
                 triggerClassName="flex h-auto w-full flex-col items-start gap-2 rounded-xl border border-k-black-08 px-4 py-4 text-left transition-colors hover:border-k-black-12 hover:bg-k-black-02"
               >
                 <action.icon

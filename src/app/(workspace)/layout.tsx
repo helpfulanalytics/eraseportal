@@ -2,22 +2,22 @@ import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PATHNAME_HEADER } from "@/proxy";
-import { AppShell } from "@/components/shell/app-shell";
+import { MinimalShell } from "@/components/shell/minimal-shell";
 import { WorkspaceProvider } from "@/components/workspace-provider";
 import {
   getCurrentUser,
-  getNavTree,
+  getOrganization,
   getPeople,
   getWorkspace,
 } from "@/lib/kitchen-data";
 
 /**
- * The one place workspace-wide data is read. Everything below either receives
- * it as props (the sidebar's folder tree) or reads it from context (the people
- * directory, the current user).
- *
- * This is also the auth gate: no session, no workspace. The `(auth)` routes
- * sit outside this group precisely so they can render without one.
+ * The gate for the *unscoped* pages only — the dashboard (`/`) and the
+ * project creator (`/admin/new`). Every org-scoped page (folders, boards,
+ * conversations, tasks, settings, …) lives under `src/app/w/[orgSlug]/` with
+ * its own layout instead; a client never actually renders anything under
+ * this one — they're redirected straight to their org's workspace below,
+ * since a client only ever has one org and there's nothing to pick.
  */
 export default async function WorkspaceLayout({
   children,
@@ -37,21 +37,18 @@ export default async function WorkspaceLayout({
     redirect(`/sign-in${next}`);
   }
 
-  // Fetched in parallel — none depend on each other, and this layout blocks
-  // every route beneath it.
-  const [workspace, people, navFolders] = await Promise.all([
-    getWorkspace(),
-    getPeople(),
-    getNavTree(),
-  ]);
+  if (currentUser.kind === "client" && currentUser.organizationId) {
+    const organization = await getOrganization(currentUser.organizationId);
+    if (organization) redirect(`/w/${organization.slug}`);
+  }
+
+  // Fetched in parallel. No folder tree here — there's no "current org" on
+  // these pages, so a tree would have nothing meaningful to scope to.
+  const [workspace, people] = await Promise.all([getWorkspace(), getPeople()]);
 
   return (
-    <WorkspaceProvider
-      workspace={workspace}
-      people={people}
-      currentUser={currentUser}
-    >
-      <AppShell navFolders={navFolders}>{children}</AppShell>
+    <WorkspaceProvider workspace={workspace} people={people} currentUser={currentUser}>
+      <MinimalShell>{children}</MinimalShell>
     </WorkspaceProvider>
   );
 }

@@ -23,7 +23,7 @@ const SANS_STACK = [
 ].join(", ");
 
 export const metadata: Metadata = {
-  title: "Workspace",
+  title: "Erase Friction Portal",
   description: "Client workspace — folders, conversations, files, and tasks.",
 };
 

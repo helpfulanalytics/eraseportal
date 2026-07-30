@@ -61,6 +61,12 @@ npm run seed -- --force   # overwrite seeded documents in place
 58 documents across 13 collections, keyed by domain id so a re-seed restores
 rather than duplicates. It never deletes: a hand-added document survives.
 
+**As of 2026-07-28 the live database is no longer in this seeded state** — it
+holds real data from manual testing (workspaces:1, people:2, folders:3,
+items:8, conversations:2, messages:1, boards:2, documents:1, embeds:3).
+Don't run `--force` or the reset script without checking with whoever's data
+is in there.
+
 ## Rules and indexes
 
 ```bash
@@ -94,12 +100,19 @@ walk the object; flag any array whose parent is also an array
 
 ## What is and isn't wired
 
-Working end to end: sign-in, sign-up, password reset, sign-out, every read on
-every route, and file upload into a folder.
+See [`handoff-2.md`](./handoff-2.md) for the current, detailed breakdown —
+this section is a summary and will drift if only this file gets updated.
 
-Not wired: message composer writes, reactions, the folder Create button, board
-and document editing, and search. Those are still chrome — see
-`docs/handoff-1.md`.
+Working end to end: sign-in, sign-up, password reset, sign-out, every read on
+every route, file upload into a folder, message composer writes, the folder
+Create button, folder/board/conversation create-rename-delete, board colour
+and column CRUD, card CRUD with drag-and-drop and comments, folder colour and
+cover image, and linking a client to a folder.
+
+Not wired: message reactions/reply, Share dialog persistence, document
+editing, real search, task creation (only completion-toggle exists), and
+enforcement of `Folder.access` / `Message.isNote` (both are stored but
+nothing reads them on the query path).
 
 ## Emulators
 

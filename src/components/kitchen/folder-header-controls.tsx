@@ -37,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useOrgSlug } from "@/components/workspace-provider";
 import { SWATCH_COLORS } from "@/lib/kitchen-format";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +57,7 @@ export function FolderHeaderControls({
   itemCount: number;
   triggerClassName?: string;
 }) {
+  const orgSlug = useOrgSlug();
   const [title, setTitle] = useState(name);
   const [editing, setEditing] = useState(false);
   const [folderColor, setFolderColor] = useState(color ?? DEFAULT_FOLDER_COLOR);
@@ -112,7 +114,7 @@ export function FolderHeaderControls({
     startDelete(async () => {
       try {
         await deleteFolderAction(folderId);
-        window.location.assign("/");
+        window.location.assign(`/w/${orgSlug}`);
       } catch (cause) {
         setError(
           cause instanceof Error ? cause.message : "Couldn't delete the folder.",

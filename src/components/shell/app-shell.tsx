@@ -3,44 +3,71 @@
 import { useSyncExternalStore } from "react";
 import { GlobalSearch } from "@/components/shell/global-search";
 import { IconRail } from "@/components/shell/icon-rail";
+import { InboxSidebar } from "@/components/shell/inbox-sidebar";
 import { Sidebar } from "@/components/shell/sidebar";
 import { UserMenu } from "@/components/shell/user-menu";
+import { useOrgSlug } from "@/components/workspace-provider";
 import type { NavFolder } from "@/lib/kitchen-types";
 
 const SIDEBAR_KEY = "workspace:sidebar-open";
+const INBOX_KEY = "workspace:inbox-open";
 
 /*
- * The sidebar preference lives in localStorage, which React can't read during
- * SSR. Exposing it as an external store lets the server render the default
- * (open) and the client swap to the stored value on hydration without a
- * mismatch — reading it in an effect would instead cause a cascading render.
+ * Both shell preferences live in localStorage, which React can't read during
+ * SSR. Exposing them as external stores lets the server render the defaults
+ * (sidebar open, inbox closed) and the client swap to the stored values on
+ * hydration without a mismatch — reading them in an effect would instead
+ * cause a cascading render.
+ *
+ * They're kept here, above the router, so the Inbox survives navigation:
+ * clicking a message opens the conversation in the card next door without the
+ * panel unmounting, which is the behaviour that makes it an inbox rather than
+ * a page you keep going back to.
  */
-const listeners = new Set<() => void>();
-let cached: boolean | null = null;
+function makeFlagStore(key: string, fallback: boolean) {
+  const listeners = new Set<() => void>();
+  let cached: boolean | null = null;
 
-function readSidebar(): boolean {
-  if (cached === null) {
-    cached = window.localStorage.getItem(SIDEBAR_KEY) !== "false";
+  function read(): boolean {
+    if (cached === null) {
+      const stored = window.localStorage.getItem(key);
+      cached = stored === null ? fallback : stored === "true";
+    }
+    return cached;
   }
-  return cached;
-}
 
-function subscribeSidebar(onChange: () => void) {
-  listeners.add(onChange);
-  return () => {
-    listeners.delete(onChange);
+  return {
+    read,
+    subscribe(onChange: () => void) {
+      listeners.add(onChange);
+      return () => {
+        listeners.delete(onChange);
+      };
+    },
+    set(next: boolean) {
+      cached = next;
+      window.localStorage.setItem(key, String(next));
+      for (const listener of listeners) listener();
+    },
+    toggle() {
+      this.set(!read());
+    },
   };
 }
 
-function toggleSidebar() {
-  cached = !readSidebar();
-  window.localStorage.setItem(SIDEBAR_KEY, String(cached));
-  for (const listener of listeners) listener();
-}
+const sidebarStore = makeFlagStore(SIDEBAR_KEY, true);
+const inboxStore = makeFlagStore(INBOX_KEY, false);
 
 /**
- * Shell geometry: fixed icon rail, collapsible sidebar, and a white card
- * floating inset on the grey page. See docs/kitchen-scan.md §2.
+ * Shell geometry: fixed icon rail, one left panel, and a white card floating
+ * inset on the grey page. See docs/kitchen-scan.md §2.
+ *
+ * The left panel is *either* the folder tree *or* the Inbox, never both —
+ * the rail's Inbox button swaps between them. They're drawn differently on
+ * purpose: the folder tree lives inside the page card (it navigates within
+ * the thing you're looking at), while the Inbox is a card of its own with a
+ * gap beside it (it's a separate surface you work down while the page next to
+ * it changes).
  */
 export function AppShell({
   children,
@@ -49,11 +76,23 @@ export function AppShell({
   children: React.ReactNode;
   navFolders: NavFolder[];
 }) {
+  const orgSlug = useOrgSlug();
   const sidebarOpen = useSyncExternalStore(
-    subscribeSidebar,
-    readSidebar,
+    sidebarStore.subscribe,
+    sidebarStore.read,
     () => true,
   );
+  const inboxOpen = useSyncExternalStore(
+    inboxStore.subscribe,
+    inboxStore.read,
+    () => false,
+  );
+
+  // The Inbox replaces the folder tree rather than joining it. Two panels
+  // would leave the page card about 400px wide on a laptop, and the rail
+  // already says which one you're in.
+  const showInbox = inboxOpen && Boolean(orgSlug);
+  const showFolders = sidebarOpen && !showInbox;
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-k-page">
@@ -67,10 +106,23 @@ export function AppShell({
       </header>
 
       <div className="flex min-h-0 flex-1 pb-[var(--k-card-inset)]">
-        <IconRail onToggleSidebar={toggleSidebar} sidebarOpen={sidebarOpen} />
+        <IconRail
+          onToggleSidebar={() =>
+            // Collapsing while the Inbox is up should put the folder tree
+            // away, not toggle a panel nobody can see.
+            showInbox ? inboxStore.set(false) : sidebarStore.toggle()
+          }
+          sidebarOpen={showFolders}
+          inboxOpen={showInbox}
+          onToggleInbox={() => inboxStore.toggle()}
+        />
+
+        {showInbox && orgSlug ? (
+          <InboxSidebar orgSlug={orgSlug} onClose={() => inboxStore.set(false)} />
+        ) : null}
 
         <div className="mr-[var(--k-card-inset)] flex min-w-0 flex-1 overflow-hidden rounded-2xl bg-background shadow-[0_0_0_0.5px_var(--k-black-08)]">
-          {sidebarOpen ? <Sidebar folders={navFolders} /> : null}
+          {showFolders ? <Sidebar folders={navFolders} /> : null}
           <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>

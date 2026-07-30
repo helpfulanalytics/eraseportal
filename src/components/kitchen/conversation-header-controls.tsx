@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useOrgSlug } from "@/components/workspace-provider";
 
 export function ConversationHeaderControls({
   conversationId,
@@ -31,6 +32,7 @@ export function ConversationHeaderControls({
   folderId: string;
   name: string;
 }) {
+  const orgSlug = useOrgSlug();
   const [title, setTitle] = useState(name);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export function ConversationHeaderControls({
     }
     startDelete(async () => {
       await deleteConversationAction(conversationId, folderId);
-      window.location.assign(`/folders/${folderId}`);
+      window.location.assign(`/w/${orgSlug}/folders/${folderId}`);
     });
   };
 

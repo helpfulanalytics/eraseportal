@@ -15,6 +15,7 @@ import { useRef, useState } from "react";
 import { GalleryVerticalEndIcon } from "lucide-react";
 import { setFolderCoverAction } from "@/app/(workspace)/actions";
 import { uploadFile } from "@/lib/firebase/storage";
+import { unsupportedImageReason } from "@/lib/kitchen-format";
 
 export function FolderCoverButton({ folderId }: { folderId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,19 +27,19 @@ export function FolderCoverButton({ folderId }: { folderId: string }) {
     // nothing stops a PDF or a .zip from reaching this input — cheap to
     // check client-side before spending an upload on something that will
     // never render as a background image.
-    if (!file.type.startsWith("image/")) {
-      setError("Choose an image file.");
+    const reason = unsupportedImageReason(file);
+    if (reason) {
+      setError(reason);
       return;
     }
 
     setBusy(true);
     setError(null);
     try {
-      const { done } = uploadFile(`folders/${folderId}`, file);
-      const result = await done;
+      const result = await uploadFile(`folders/${folderId}`, file);
       await setFolderCoverAction(folderId, result.downloadUrl);
-    } catch {
-      setError("Couldn't set that as the cover.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't set that as the cover.");
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = "";

@@ -17,10 +17,22 @@ import { createContext, use, type ReactNode } from "react";
 import type { Person, Workspace } from "@/lib/kitchen-types";
 
 interface WorkspaceContextValue {
+  /**
+   * Whatever's showing in the sidebar header. Inside an org's workspace this
+   * is `{ id: organization.id, name: organization.name }` — there's no
+   * separate global "workspace" concept anymore, an org's name and id just
+   * fill this same shape.
+   */
   workspace: Workspace;
   people: Record<string, Person>;
   /** Null before sign-in, and on routes that render outside a session. */
   currentUser: Person | null;
+  /**
+   * The `/w/{slug}` segment for the org currently being viewed — null on the
+   * unscoped top-level pages (the dashboard, `/admin/new`). Link-builders
+   * (`hrefFor` in sidebar.tsx, create-dialog redirects) prefix with this.
+   */
+  orgSlug?: string | null;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -29,11 +41,12 @@ export function WorkspaceProvider({
   workspace,
   people,
   currentUser,
+  orgSlug = null,
   children,
 }: WorkspaceContextValue & { children: ReactNode }) {
   return (
     <WorkspaceContext
-      value={{ workspace, people, currentUser }}
+      value={{ workspace, people, currentUser, orgSlug }}
     >
       {children}
     </WorkspaceContext>
@@ -67,4 +80,8 @@ export function usePerson(id: string | undefined): Person | undefined {
 
 export function useCurrentUser(): Person | null {
   return useWorkspaceContext().currentUser;
+}
+
+export function useOrgSlug(): string | null {
+  return useWorkspaceContext().orgSlug ?? null;
 }

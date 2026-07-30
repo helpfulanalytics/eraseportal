@@ -2,7 +2,7 @@
  * Pure presentation helpers. No data access, so both server and client
  * components can import these directly.
  */
-import type { FolderItem } from "./kitchen-types";
+import type { Block, FolderItem, Inline } from "./kitchen-types";
 
 /**
  * Fixed swatch set shared by board colour, folder colour, and person avatar
@@ -20,17 +20,44 @@ export const SWATCH_COLORS = [
   "var(--k-red)",
 ] as const;
 
-/** Route for a folder item, by kind. */
-export function itemHref(item: FolderItem): string | undefined {
+/**
+ * Mirrors `safeContentType()` in `storage.rules` — SVG and HTML are blocked
+ * there because both can carry executable script and run it from the
+ * bucket's own origin. Checking here too means a rejected upload shows a
+ * specific message ("SVGs aren't allowed") instead of a raw failed request;
+ * the rule is still what actually enforces it; this is only for the message.
+ */
+export function unsupportedImageReason(file: File): string | null {
+  if (!file.type.startsWith("image/")) return "Choose an image file.";
+  return blockedUploadReason(file);
+}
+
+/**
+ * The general-purpose version — for the folder Upload button, which takes
+ * any file type, not just images. Still blocks SVG/HTML/XHTML specifically,
+ * same reason as above.
+ */
+export function blockedUploadReason(file: File): string | null {
+  if (file.type.match(/^image\/svg/)) {
+    return "SVGs aren't allowed (they can contain scripts) — try PNG or JPG.";
+  }
+  if (file.type.match(/^text\/html/) || file.type.match(/^application\/xhtml/)) {
+    return "HTML files aren't allowed (they can contain scripts).";
+  }
+  return null;
+}
+
+/** Route for a folder item, by kind — scoped to its org's workspace portal. */
+export function itemHref(item: FolderItem, orgSlug: string): string | undefined {
   switch (item.kind) {
     case "conversation":
-      return `/conversations/${item.id}`;
+      return `/w/${orgSlug}/conversations/${item.id}`;
     case "board":
-      return `/boards/${item.id}`;
+      return `/w/${orgSlug}/boards/${item.id}`;
     case "document":
-      return `/documents/${item.id}`;
+      return `/w/${orgSlug}/documents/${item.id}`;
     case "embed":
-      return `/embeds/${item.id}`;
+      return `/w/${orgSlug}/embeds/${item.id}`;
     default:
       return undefined;
   }
@@ -63,6 +90,45 @@ export function formatDateTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+/**
+ * First line of a message body, flattened to plain text for a preview row.
+ *
+ * `handles` maps person id to @handle so a mention reads as "@chelsea" rather
+ * than as a raw id. Optional because the caller may not have the people
+ * directory to hand; without it a mention degrades to a bare "@".
+ */
+export function blockPreview(
+  body: Block[],
+  handles?: Record<string, string>,
+): string {
+  for (const block of body) {
+    if (block.b === "p") {
+      const text = inlineText(block.children, handles);
+      if (text.trim()) return text.trim();
+      continue;
+    }
+    if (block.b === "ul") {
+      for (const item of block.items) {
+        const text = inlineText(item.children, handles);
+        if (text.trim()) return text.trim();
+      }
+      continue;
+    }
+    if (block.v.trim()) return block.v.trim();
+  }
+  return "";
+}
+
+function inlineText(nodes: Inline[], handles?: Record<string, string>): string {
+  return nodes
+    .map((node) => {
+      if (node.t === "mention") return `@${handles?.[node.personId] ?? ""}`;
+      if (node.t === "link") return node.v ?? node.href;
+      return node.v;
+    })
+    .join("");
 }
 
 /** "40.7 kB" — matches the metadata line on file rows. */

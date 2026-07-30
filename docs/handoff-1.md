@@ -1,5 +1,11 @@
 # Handoff 1 — kitchen-replacement
 
+> **Superseded by [`handoff-2.md`](./handoff-2.md).** Everything under "Known
+> gaps" and "Current state" below describes a mock-data, no-backend build
+> that no longer exists — the app has been Firebase-backed with a working
+> auth flow since commit `a956429`. Kept for the traps section (still
+> accurate) and project history; for current status, read handoff-2 first.
+
 Written 2026-07-26, end of the second work stage. Read this plus
 [`kitchen-scan.md`](./kitchen-scan.md) before touching anything.
 

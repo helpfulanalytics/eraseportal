@@ -1,12 +1,14 @@
 "use client";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { usePerson } from "@/components/workspace-provider";
 import { cn } from "@/lib/utils";
+import { Avatar as AvatuneAvatar } from "@avatune/react";
+import theme from "@avatune/pacovqzz-theme/react";
 
 /**
- * Avatar for a person id. Falls back to tinted initials — there are no image
- * URLs in the dataset, and initials read better than a generic silhouette.
+ * Avatar for a person id. Renders `avatarUrl` when set (from onboarding);
+ * falls back to an Avatune generated avatar otherwise.
  *
  * A client component reading the directory from context rather than a server
  * component awaiting `getPerson`, because it renders on both sides of the
@@ -25,11 +27,12 @@ export function PersonAvatar({
 
   return (
     <Avatar className={cn("size-6", className)}>
+      {person.avatarUrl ? <AvatarImage src={person.avatarUrl} alt="" /> : null}
       <AvatarFallback
-        className="text-[9px] text-k-white"
+        className="flex size-full items-center justify-center overflow-hidden [&>svg]:size-full"
         style={{ backgroundColor: person.color }}
       >
-        {person.initials}
+        <AvatuneAvatar theme={theme} size={120} seed={person.id} />
       </AvatarFallback>
     </Avatar>
   );

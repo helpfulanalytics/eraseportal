@@ -4,6 +4,7 @@ import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { CheckIcon, ChevronLeftIcon } from "lucide-react";
 import { requestPasswordReset } from "@/lib/firebase/auth-actions";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,8 +22,7 @@ export function AuthResetPasswordShowcasePage() {
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState(false);
 
-  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const sendReset = async () => {
     if (!email.trim() || pending) return;
 
     setPending(true);
@@ -40,6 +40,11 @@ export function AuthResetPasswordShowcasePage() {
     setSent(true);
   };
 
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    void sendReset();
+  };
+
   const reset = () => {
     setSent(false);
     setEmail("");
@@ -52,6 +57,8 @@ export function AuthResetPasswordShowcasePage() {
           <SentState
             email={email}
             onTryDifferent={reset}
+            onResend={sendReset}
+            pending={pending}
           />
         ) : (
           <RequestState
@@ -62,24 +69,6 @@ export function AuthResetPasswordShowcasePage() {
           />
         )}
       </Card>
-
-      <button
-        type="button"
-        onClick={() => (sent ? reset() : setSent(true))}
-        className="absolute right-4 bottom-4 cursor-pointer rounded font-mono text-[10px] text-muted-foreground uppercase tracking-[0.2em] opacity-40 transition-opacity hover:opacity-80 focus-visible:opacity-80 focus-visible:outline-none"
-      >
-        Demo: toggle state →
-      </button>
-    </div>
-  );
-}
-
-function BrandMark() {
-  return (
-    <div className="flex items-center justify-center">
-      <div className="flex size-8 items-center justify-center rounded-md bg-foreground">
-        <span className="block size-2 rounded-full bg-background" />
-      </div>
     </div>
   );
 }
@@ -98,7 +87,7 @@ function RequestState({
   return (
     <>
       <CardHeader className="items-center text-center">
-        <BrandMark />
+        <BrandMark size={32} />
         <CardTitle className="mt-4 font-heading text-2xl tracking-tight">
           Reset your password
         </CardTitle>
@@ -143,9 +132,13 @@ function RequestState({
 function SentState({
   email,
   onTryDifferent,
+  onResend,
+  pending,
 }: {
   email: string;
   onTryDifferent: () => void;
+  onResend: () => void;
+  pending: boolean;
 }) {
   return (
     <>
@@ -167,7 +160,7 @@ function SentState({
           folder.
         </p>
         <div className="flex flex-col gap-2">
-          <Button variant="outline" size="lg">
+          <Button variant="outline" size="lg" loading={pending} onClick={onResend}>
             Resend link
           </Button>
           <Button variant="ghost" size="lg" onClick={onTryDifferent}>

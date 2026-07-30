@@ -18,7 +18,6 @@ import {
   LayoutTemplateIcon,
   MoreHorizontalIcon,
   PencilIcon,
-  StarIcon,
   TrashIcon,
 } from "lucide-react";
 import {
@@ -35,6 +34,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { StarButton } from "@/components/kitchen/star-button";
+import { useOrgSlug } from "@/components/workspace-provider";
 import { SWATCH_COLORS } from "@/lib/kitchen-format";
 import { cn } from "@/lib/utils";
 
@@ -43,12 +44,15 @@ export function BoardHeader({
   folderId,
   name,
   color,
+  starred,
 }: {
   boardId: string;
   folderId: string;
   name: string;
   color?: string;
+  starred?: boolean;
 }) {
+  const orgSlug = useOrgSlug();
   const [title, setTitle] = useState(name);
   const [editing, setEditing] = useState(false);
   const [boardColor, setBoardColor] = useState(color ?? SWATCH_COLORS[0]);
@@ -107,7 +111,7 @@ export function BoardHeader({
       // redirects: the board this page is rendering no longer exists, so a
       // client-side push would try to re-render a route with stale server
       // data rather than actually leaving it.
-      window.location.assign(`/folders/${folderId}`);
+      window.location.assign(`/w/${orgSlug}/folders/${folderId}`);
     });
   };
 
@@ -154,13 +158,7 @@ export function BoardHeader({
           </button>
         )}
 
-        <button
-          type="button"
-          aria-label="Favourite"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-k-black-36 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
-        >
-          <StarIcon className="size-4" strokeWidth={1.6} />
-        </button>
+        <StarButton kind="board" id={boardId} starred={starred} />
 
         <DropdownMenu>
           <DropdownMenuTrigger

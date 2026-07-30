@@ -31,7 +31,6 @@ import {
   MessageSquareIcon,
   PlusIcon,
   ReceiptTextIcon,
-  UserIcon,
   XIcon,
 } from "lucide-react";
 import {
@@ -61,9 +60,8 @@ const ROWS: Array<{
   { key: "conversation", icon: MessageSquareIcon, label: "Conversation", hint: "Discuss anything with clients", inFolder: true },
   { key: "embed", icon: LinkIcon, label: "Embed", hint: "Add third-party apps", inFolder: true },
   { key: "link", icon: ExternalLinkIcon, label: "Link", hint: "Share external resources", inFolder: true },
-  { key: "document", icon: FileTextIcon, label: "Document", hint: "Curate content", inFolder: true },
+  { key: "document", icon: FileTextIcon, label: "Document", hint: "Write a doc, or open a canvas board", inFolder: true },
   { key: "proposal", icon: ReceiptTextIcon, label: "Proposal or Contract", hint: "Prepare offers for clients", inFolder: true },
-  { key: "client", icon: UserIcon, label: "Client", hint: "Invite clients to your workspace", inFolder: false },
 ];
 
 /** Dialog title for a type — "Create Board", "Create Proposal or Contract". */
@@ -75,6 +73,7 @@ const TITLE = Object.fromEntries(ROWS.map((r) => [r.key, r.label])) as Record<
 export function CreateMenu({
   folderId,
   folders = [],
+  organizations = [],
   triggerClassName,
   initial,
   children,
@@ -82,10 +81,14 @@ export function CreateMenu({
   /** Set when opened from a folder — the dialogs then skip their picker. */
   folderId?: string;
   /**
-   * Choices for the dialogs' folder picker. Only id and name are read, so
-   * callers pass whatever folder shape they already have.
+   * Choices for the dialogs' folder picker. `organizationSlug`, when
+   * present, is used to redirect into the right org's `/w/{slug}` portal
+   * after creating something in that folder from an unscoped context (the
+   * cross-org home-page picker) — see `CreateItemDialog`.
    */
-  folders?: Array<{ id: string; name: string }>;
+  folders?: Array<{ id: string; name: string; organizationSlug?: string }>;
+  /** Passed through to the Folder dialog's organization picker. */
+  organizations?: Array<{ id: string; name: string; slug: string }>;
   triggerClassName?: string;
   /**
    * Skip the panel and open one type's dialog straight away. The home page's
@@ -112,7 +115,7 @@ export function CreateMenu({
 
   const dialogs =
     dialog === "folder" ? (
-      <CreateFolderDialog onClose={() => setDialog(null)} />
+      <CreateFolderDialog organizations={organizations} onClose={() => setDialog(null)} />
     ) : dialog ? (
       <CreateItemDialog
         type={dialog}

@@ -9,12 +9,17 @@ import {
   LayoutTemplateIcon,
   LinkIcon,
   MessageSquareIcon,
+  ShapesIcon,
   UserIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CreateMenu } from "@/components/kitchen/create-menu";
-import { useWorkspace } from "@/components/workspace-provider";
+import {
+  useCurrentUser,
+  useOrgSlug,
+  useWorkspace,
+} from "@/components/workspace-provider";
 import type { NavFolder } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
@@ -36,12 +41,6 @@ function HomeGlyph({ className }: { className?: string }) {
   );
 }
 
-const LINKS = [
-  { href: "/", icon: HomeGlyph, label: "Home", exact: true },
-  { href: "/tasks/me", icon: CircleCheckIcon, label: "My Tasks" },
-  { href: "/library", icon: ArchiveIcon, label: "Library" },
-];
-
 type NavItem = NavFolder["items"][number];
 
 /**
@@ -51,23 +50,24 @@ type NavItem = NavFolder["items"][number];
  * this one deliberately slim rather than widening `NavFolder.items` to match
  * `FolderItem` just to reuse one switch statement.
  */
-function hrefFor(item: NavItem): string {
+function hrefFor(item: NavItem, orgSlug: string): string {
   switch (item.kind) {
     case "conversation":
-      return `/conversations/${item.id}`;
+      return `/w/${orgSlug}/conversations/${item.id}`;
     case "board":
-      return `/boards/${item.id}`;
+      return `/w/${orgSlug}/boards/${item.id}`;
     case "document":
-      return `/documents/${item.id}`;
+      return `/w/${orgSlug}/documents/${item.id}`;
     case "embed":
-      return `/embeds/${item.id}`;
+      return `/w/${orgSlug}/embeds/${item.id}`;
   }
 }
 
 /**
  * Link is stored as an embed whose provider says "Link" — see `createEmbed`
  * in kitchen-data.ts — so distinguishing the two icons means reading
- * `meta.provider`, not `kind`.
+ * `meta.provider`, not `kind`. A canvas document is the same shape of
+ * exception: same `kind`, different `meta.docKind`.
  */
 function iconFor(item: NavItem) {
   switch (item.kind) {
@@ -76,7 +76,9 @@ function iconFor(item: NavItem) {
     case "board":
       return LayoutTemplateIcon;
     case "document":
-      return FileTextIcon;
+      return item.meta.type === "document" && item.meta.docKind === "canvas"
+        ? ShapesIcon
+        : FileTextIcon;
     case "embed":
       return item.meta.type === "embed" && item.meta.provider === "Link"
         ? ExternalLinkIcon
@@ -87,6 +89,15 @@ function iconFor(item: NavItem) {
 export function Sidebar({ folders }: { folders: NavFolder[] }) {
   const pathname = usePathname();
   const workspace = useWorkspace();
+  const currentUser = useCurrentUser();
+  const orgSlug = useOrgSlug();
+  const isAdmin = currentUser?.kind === "member";
+
+  const links = [
+    { href: `/w/${orgSlug}`, icon: HomeGlyph, label: "Home", exact: true },
+    { href: `/w/${orgSlug}/tasks/me`, icon: CircleCheckIcon, label: "My Tasks" },
+    { href: `/w/${orgSlug}/library`, icon: ArchiveIcon, label: "Library" },
+  ];
 
   return (
     <div className="flex h-full w-sidebar shrink-0 flex-col overflow-y-auto border-k-black-06 border-r bg-background">
@@ -94,11 +105,13 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
         <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
           {workspace.name}
         </h2>
-        <CreateMenu folders={folders} />
+        {/* Clients start conversations from inside a folder (see that
+        page's own Create menu) — everything this one offers is admin-only. */}
+        {isAdmin ? <CreateMenu folders={folders} /> : null}
       </div>
 
       <ul className="flex flex-col gap-px px-2">
-        {LINKS.map((link) => {
+        {links.map((link) => {
           const active = link.exact
             ? pathname === link.href
             : pathname.startsWith(link.href);
@@ -117,7 +130,7 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
 
       <ul className="flex flex-col gap-px px-2 pb-4">
         {folders.map((folder) => {
-          const href = `/folders/${folder.id}`;
+          const href = `/w/${orgSlug}/folders/${folder.id}`;
           return (
             <li key={folder.id}>
               <SidebarRow href={href} active={pathname === href}>
@@ -136,7 +149,7 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
               {folder.items.length > 0 || folder.clients.length > 0 ? (
                 <ul className="flex flex-col gap-px">
                   {folder.items.map((item) => {
-                    const itemHref = hrefFor(item);
+                    const itemHref = hrefFor(item, orgSlug ?? "");
                     const Icon = iconFor(item);
                     return (
                       <li key={item.id}>
@@ -156,13 +169,12 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
                     );
                   })}
                   {/* No per-client page exists yet — every client row lands
-                      on the workspace-wide list, same as clicking a client
-                      row anywhere else in the app. */}
+                      on this org's Members list in Settings. */}
                   {folder.clients.map((client) => (
                     <li key={`client:${client.id}`}>
                       <SidebarRow
-                        href="/clients"
-                        active={pathname === "/clients"}
+                        href={`/w/${orgSlug}/settings?tab=members`}
+                        active={false}
                         className="pl-7"
                       >
                         <UserIcon

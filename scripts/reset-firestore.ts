@@ -25,7 +25,7 @@ const COLLECTIONS = [
   "boards",
   "documents",
   "embeds",
-  "companies",
+  "organizations",
   "templates",
   "tasks",
   "inbox",

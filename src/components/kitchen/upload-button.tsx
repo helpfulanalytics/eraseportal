@@ -11,8 +11,9 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDownIcon, UploadIcon } from "lucide-react";
-import { registerUpload } from "@/app/(workspace)/folders/[folderId]/actions";
+import { registerUpload } from "@/app/w/[orgSlug]/folders/[folderId]/actions";
 import { uploadFile } from "@/lib/firebase/storage";
+import { blockedUploadReason } from "@/lib/kitchen-format";
 
 export function UploadButton({ folderId }: { folderId: string }) {
   const router = useRouter();
@@ -27,11 +28,16 @@ export function UploadButton({ folderId }: { folderId: string }) {
     for (const [index, file] of list.entries()) {
       const position = list.length > 1 ? ` (${index + 1}/${list.length})` : "";
 
+      const reason = blockedUploadReason(file);
+      if (reason) {
+        setError(reason);
+        break;
+      }
+
       try {
-        const { done } = uploadFile(`folders/${folderId}`, file, (fraction) => {
+        const result = await uploadFile(`folders/${folderId}`, file, (fraction) => {
           setStatus(`Uploading ${Math.round(fraction * 100)}%${position}`);
         });
-        const result = await done;
 
         setStatus(`Saving${position}`);
         await registerUpload({
@@ -42,10 +48,15 @@ export function UploadButton({ folderId }: { folderId: string }) {
           storagePath: result.path,
           downloadUrl: result.downloadUrl,
         });
-      } catch {
-        // Storage rejects oversize and script-ish content types at the rule
-        // level, which is the common case here.
-        setError(`Couldn't upload ${file.name}.`);
+      } catch (cause) {
+        // Storage also rejects oversize files at the rule level — that case
+        // still falls back to this generic message since the SDK's own
+        // error text for it isn't much clearer.
+        setError(
+          cause instanceof Error && cause.name === "NotSignedInError"
+            ? cause.message
+            : `Couldn't upload ${file.name}.`,
+        );
         break;
       }
     }

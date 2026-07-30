@@ -4,6 +4,7 @@ import { CheckIcon, GlobeIcon, LinkIcon, LockIcon, ShareIcon, XIcon } from "luci
 import { useEffect, useState } from "react";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { usePeople } from "@/components/workspace-provider";
+import { isEnabled } from "@/lib/kitchen-flags";
 import { cn } from "@/lib/utils";
 
 type Access = "invited" | "link";
@@ -15,6 +16,7 @@ type Access = "invited" | "link";
  */
 export function ShareDialog({ title }: { title: string }) {
   const people = usePeople();
+  const shareDialogEnabled = isEnabled("shareDialog");
   const [open, setOpen] = useState(false);
   const [access, setAccess] = useState<Access>("invited");
   const [copied, setCopied] = useState(false);
@@ -81,22 +83,24 @@ export function ShareDialog({ title }: { title: string }) {
               </button>
             </div>
 
-            <div className="mt-4 flex flex-col gap-1.5">
-              <AccessOption
-                icon={<LockIcon className="size-4" strokeWidth={1.6} />}
-                title="Invited people only"
-                hint="Only the people listed below can open this."
-                selected={access === "invited"}
-                onSelect={() => setAccess("invited")}
-              />
-              <AccessOption
-                icon={<GlobeIcon className="size-4" strokeWidth={1.6} />}
-                title="Anyone with the link"
-                hint="Anyone who has the link can view — no sign-in required."
-                selected={access === "link"}
-                onSelect={() => setAccess("link")}
-              />
-            </div>
+            {shareDialogEnabled ? (
+              <div className="mt-4 flex flex-col gap-1.5">
+                <AccessOption
+                  icon={<LockIcon className="size-4" strokeWidth={1.6} />}
+                  title="Invited people only"
+                  hint="Only the people listed below can open this."
+                  selected={access === "invited"}
+                  onSelect={() => setAccess("invited")}
+                />
+                <AccessOption
+                  icon={<GlobeIcon className="size-4" strokeWidth={1.6} />}
+                  title="Anyone with the link"
+                  hint="Anyone who has the link can view — no sign-in required."
+                  selected={access === "link"}
+                  onSelect={() => setAccess("link")}
+                />
+              </div>
+            ) : null}
 
             <div className="mt-4">
               <div className="mb-2 text-k-black-40 text-md">People</div>

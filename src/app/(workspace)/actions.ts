@@ -191,8 +191,8 @@ export async function sendMessageAction(
             to: recipient.email,
             subject: `${me.name} sent a message in ${conversation.name}`,
             html: `
-              <p>${me.name} wrote in <strong>${conversation.name}</strong>:</p>
-              <p>${trimmed}</p>
+              <p>${escapeHtml(me.name)} wrote in <strong>${escapeHtml(conversation.name)}</strong>:</p>
+              <p>${escapeHtml(trimmed)}</p>
               <p><a href="${SITE_URL}">Open it</a></p>
             `,
           });
@@ -411,7 +411,7 @@ export async function toggleTaskAction(
           await sendEmail({
             to: author.email,
             subject: `"${task.title}" was completed`,
-            html: `<p>${me.name} marked <strong>${task.title}</strong> as done.</p>`,
+            html: `<p>${escapeHtml(me.name)} marked <strong>${escapeHtml(task.title)}</strong> as done.</p>`,
           });
         }
       }
@@ -446,7 +446,7 @@ export async function createTaskAction(input: {
         await sendEmail({
           to: assignee.email,
           subject: `${me.name} assigned you a task`,
-          html: `<p>${me.name} assigned you <strong>${title}</strong>.</p>`,
+          html: `<p>${escapeHtml(me.name)} assigned you <strong>${escapeHtml(title)}</strong>.</p>`,
         });
       }
     } catch (cause) {
@@ -643,6 +643,16 @@ export async function createEmbedAction(
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
+function escapeHtml(unsafe: string): string {
+  if (typeof unsafe !== "string") return "";
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 /** Best-effort — a failed send must never fail the mutation it rides with. */
 async function sendInviteEmail(input: {
   to: string;
@@ -656,8 +666,8 @@ async function sendInviteEmail(input: {
       to: input.to,
       subject: `You're invited to ${input.organizationName}`,
       html: `
-        <p>Hi ${input.personName},</p>
-        <p>You've been invited to ${input.organizationName}'s workspace.</p>
+        <p>Hi ${escapeHtml(input.personName)},</p>
+        <p>You've been invited to ${escapeHtml(input.organizationName)}'s workspace.</p>
         <p><a href="${link}">Set your password and get started</a></p>
         <p>This link expires in 7 days.</p>
       `,

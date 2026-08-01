@@ -3,6 +3,7 @@
 import {
   ArchiveIcon,
   CircleCheckIcon,
+  ChevronRightIcon,
   ExternalLinkIcon,
   FileTextIcon,
   FolderIcon,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { CreateMenu } from "@/components/kitchen/create-menu";
 import {
   useCurrentUser,
@@ -129,68 +131,14 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
       <div className="px-4 pt-5 pb-1.5 text-k-black-40 text-sm">Folders</div>
 
       <ul className="flex flex-col gap-px px-2 pb-4">
-        {folders.map((folder) => {
-          const href = `/w/${orgSlug}/folders/${folder.id}`;
-          return (
-            <li key={folder.id}>
-              <SidebarRow href={href} active={pathname === href}>
-                <FolderIcon
-                  className={cn("size-4 shrink-0", !folder.color && "fill-k-yellow text-k-yellow")}
-                  style={
-                    folder.color
-                      ? { color: folder.color, fill: folder.color }
-                      : undefined
-                  }
-                  strokeWidth={1.5}
-                />
-                <span className="truncate">{folder.name}</span>
-              </SidebarRow>
-
-              {folder.items.length > 0 || folder.clients.length > 0 ? (
-                <ul className="flex flex-col gap-px">
-                  {folder.items.map((item) => {
-                    const itemHref = hrefFor(item, orgSlug ?? "");
-                    const Icon = iconFor(item);
-                    return (
-                      <li key={item.id}>
-                        <SidebarRow
-                          href={itemHref}
-                          active={pathname === itemHref}
-                          className="pl-7"
-                        >
-                          <Icon
-                            className={cn("size-4 shrink-0", !item.color && "text-k-black-56")}
-                            style={item.color ? { color: item.color } : undefined}
-                            strokeWidth={1.6}
-                          />
-                          <span className="truncate">{item.name}</span>
-                        </SidebarRow>
-                      </li>
-                    );
-                  })}
-                  {/* No per-client page exists yet — every client row lands
-                      on this org's Members list in Settings. */}
-                  {folder.clients.map((client) => (
-                    <li key={`client:${client.id}`}>
-                      <SidebarRow
-                        href={`/w/${orgSlug}/settings?tab=members`}
-                        active={false}
-                        className="pl-7"
-                      >
-                        <UserIcon
-                          className="size-4 shrink-0"
-                          style={{ color: client.color }}
-                          strokeWidth={1.6}
-                        />
-                        <span className="truncate">{client.name}</span>
-                      </SidebarRow>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </li>
-          );
-        })}
+        {folders.map((folder) => (
+          <CollapsibleFolder 
+            key={folder.id} 
+            folder={folder} 
+            orgSlug={orgSlug ?? ""} 
+            pathname={pathname} 
+          />
+        ))}
       </ul>
     </div>
   );
@@ -219,5 +167,106 @@ function SidebarRow({
     >
       {children}
     </Link>
+  );
+}
+
+function CollapsibleFolder({
+  folder,
+  orgSlug,
+  pathname,
+}: {
+  folder: NavFolder;
+  orgSlug: string;
+  pathname: string;
+}) {
+  const href = `/w/${orgSlug}/folders/${folder.id}`;
+  const hasChildren = folder.items.length > 0 || folder.clients.length > 0;
+  
+  const [isOpen, setIsOpen] = useState(() => {
+    if (pathname === href) return true;
+    if (folder.items.some((item) => pathname === hrefFor(item, orgSlug))) return true;
+    return true; // Default open
+  });
+
+  return (
+    <li>
+      <div
+        className={cn(
+          "flex items-center gap-1 rounded-lg pr-2 py-1 text-k-black-84 text-md transition-colors",
+          pathname === href ? "bg-k-black-06" : "hover:bg-k-black-03"
+        )}
+      >
+        {hasChildren ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              setIsOpen(!isOpen);
+            }}
+            className="flex size-5 shrink-0 items-center justify-center rounded text-k-black-40 hover:bg-k-black-06 hover:text-k-black-84"
+          >
+            <ChevronRightIcon
+              className={cn("size-3.5 transition-transform", isOpen && "rotate-90")}
+              strokeWidth={2}
+            />
+          </button>
+        ) : (
+          <div className="size-5 shrink-0" />
+        )}
+        <Link href={href} className="flex min-w-0 flex-1 items-center gap-2 truncate py-0.5">
+          <FolderIcon
+            className={cn("size-4 shrink-0", !folder.color && "fill-k-yellow text-k-yellow")}
+            style={
+              folder.color
+                ? { color: folder.color, fill: folder.color }
+                : undefined
+            }
+            strokeWidth={1.5}
+          />
+          <span className="truncate">{folder.name}</span>
+        </Link>
+      </div>
+
+      {hasChildren && isOpen && (
+        <ul className="flex flex-col gap-px pt-0.5">
+          {folder.items.map((item) => {
+            const itemHref = hrefFor(item, orgSlug);
+            const Icon = iconFor(item);
+            return (
+              <li key={item.id}>
+                <SidebarRow
+                  href={itemHref}
+                  active={pathname === itemHref}
+                  className="pl-8"
+                >
+                  <Icon
+                    className={cn("size-4 shrink-0", !item.color && "text-k-black-56")}
+                    style={item.color ? { color: item.color } : undefined}
+                    strokeWidth={1.6}
+                  />
+                  <span className="truncate">{item.name}</span>
+                </SidebarRow>
+              </li>
+            );
+          })}
+          {folder.clients.map((client) => (
+            <li key={`client:${client.id}`}>
+              <SidebarRow
+                href={`/w/${orgSlug}/settings?tab=members`}
+                active={false}
+                className="pl-8"
+              >
+                <UserIcon
+                  className="size-4 shrink-0"
+                  style={{ color: client.color }}
+                  strokeWidth={1.6}
+                />
+                <span className="truncate">{client.name}</span>
+              </SidebarRow>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }

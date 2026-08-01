@@ -15,7 +15,7 @@
  * navigates to its page; a **file has no page**, so it opens a preview
  * instead. That's the other half of uploads finally being viewable.
  */
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -60,6 +60,8 @@ export interface FolderRow {
   file?: PreviewFile;
   /** Canvas documents and Link embeds get their own glyph. */
   variant?: "canvas" | "link";
+  /** The external URL for embeds. */
+  embedUrl?: string;
 }
 
 type Age = "any" | "today" | "week" | "month";
@@ -88,7 +90,29 @@ export function FolderContents({
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState<string | null>(null);
   const [age, setAge] = useState<Age>("any");
-  const [grid, setGrid] = useState(false);
+  const [grid, setGridState] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("kitchen-folder-grid");
+      if (stored !== null) setGridState(stored === "true");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setGrid = (val: boolean | ((v: boolean) => boolean)) => {
+    setGridState((prev) => {
+      const next = typeof val === "function" ? val(prev) : val;
+      try {
+        window.localStorage.setItem("kitchen-folder-grid", String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
   const [preview, setPreview] = useState<PreviewFile | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -255,7 +279,7 @@ export function FolderContents({
                 )}
               >
                 <RowTarget row={row} onOpen={() => open(row)}>
-                  <ItemThumb subject={row} name={row.name} />
+                  <ItemThumb subject={{ ...row, url: row.embedUrl }} name={row.name} />
                   <span className="min-w-0">
                     <span className="block truncate text-k-black-84 text-md">
                       {row.name}
@@ -338,7 +362,7 @@ function GridCard({
 }) {
   const body = (
     <>
-      <ItemThumb subject={row} size="card" name={row.name} />
+      <ItemThumb subject={{ ...row, url: row.embedUrl }} size="card" name={row.name} />
       <span className="mt-2 block w-full truncate text-k-black-84 text-md">
         {row.name}
       </span>

@@ -28,6 +28,7 @@ export interface ThumbSubject {
   /** Canvas documents and Link embeds draw differently from their siblings. */
   variant?: "canvas" | "link";
   file?: { label: string; mime?: string; url?: string };
+  url?: string;
 }
 
 /**
@@ -126,6 +127,32 @@ export function ItemThumb({
     return (
       <span className={frame}>
         <ChatArt card={card} />
+      </span>
+    );
+  }
+
+  if (subject.kind === "embed") {
+    if (subject.url && card) {
+      return (
+        <span className={cn(frame, "relative overflow-hidden bg-white")}>
+          <iframe
+            src={subject.url}
+            className="absolute top-0 left-0 h-[400%] w-[400%] origin-top-left border-0"
+            style={{ transform: "scale(0.25)", pointerEvents: "none" }}
+            sandbox="allow-scripts allow-same-origin"
+            referrerPolicy="no-referrer"
+            tabIndex={-1}
+          />
+          <div className="absolute inset-0 z-10" />
+        </span>
+      );
+    }
+    return (
+      <span className={frame}>
+        <LinkIcon
+          className={cn("text-k-black-36", card ? "size-8" : "size-4")}
+          strokeWidth={1.6}
+        />
       </span>
     );
   }

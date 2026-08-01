@@ -1466,6 +1466,24 @@ export async function getDocumentPreviews(
   return previews;
 }
 
+export async function getEmbedUrls(
+  ids: string[],
+): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+
+  const db = adminDb();
+  const snapshots = await db.getAll(
+    ...ids.map((id) => db.collection(COLLECTIONS.embeds).doc(id)),
+  );
+
+  const urls: Record<string, string> = {};
+  for (const snapshot of snapshots) {
+    const embed = snapshot.data() as Embed | undefined;
+    if (embed?.url) urls[snapshot.id] = embed.url;
+  }
+  return urls;
+}
+
 /** One item row by id — the folder listing's row menu has nothing else. */
 export async function getFolderItem(id: string): Promise<FolderItem | undefined> {
   const item = await one<FolderItem & { downloadUrl?: string }>(COLLECTIONS.items, id);

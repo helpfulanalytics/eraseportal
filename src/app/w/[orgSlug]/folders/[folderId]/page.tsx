@@ -15,6 +15,7 @@ import { UploadButton } from "@/components/kitchen/upload-button";
 import { requireFolderAccess } from "@/lib/access-guard";
 import {
   getDocumentPreviews,
+  getEmbedUrls,
   getFolder,
   getFolderItems,
   getOrganizations,
@@ -54,6 +55,7 @@ function toRow(
   item: FolderItem,
   orgSlug: string,
   previews: Record<string, string>,
+  embedUrls: Record<string, string>,
 ): FolderRow {
   const row: FolderRow = {
     id: item.id,
@@ -79,8 +81,14 @@ function toRow(
   if (item.meta.type === "document" && item.meta.docKind === "canvas") {
     row.variant = "canvas";
   }
-  if (item.meta.type === "embed" && item.meta.provider === "Link") {
-    row.variant = "link";
+  if (item.meta.type === "embed") {
+    if (item.meta.provider === "Link") {
+      row.variant = "link";
+    }
+    const url = embedUrls[item.id];
+    if (url) {
+      row.embedUrl = url;
+    }
   }
 
   return row;
@@ -126,6 +134,10 @@ export default async function FolderPage({ params }: PageProps) {
     items
       .filter((i) => i.meta.type === "document" && !i.meta.preview)
       .map((i) => i.id),
+  );
+
+  const embedUrls = await getEmbedUrls(
+    items.filter((i) => i.meta.type === "embed").map((i) => i.id),
   );
 
   return (
@@ -195,7 +207,7 @@ export default async function FolderPage({ params }: PageProps) {
         ) : null}
 
         <FolderContents
-          rows={items.map((item) => toRow(item, orgSlug, previews))}
+          rows={items.map((item) => toRow(item, orgSlug, previews, embedUrls))}
           canManage={isAdmin}
           toolbarRight={
             <>

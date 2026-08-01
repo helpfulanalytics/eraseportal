@@ -187,14 +187,19 @@ export async function getFolders(opts?: { organizationId?: string }): Promise<Fo
   const me = await getCurrentUser();
   let folders: Folder[];
   if (opts === undefined) {
-    folders = await many<Folder>(collection(COLLECTIONS.folders).orderBy("name"));
+    folders = await many<Folder>(collection(COLLECTIONS.folders).orderBy("position").orderBy("name"));
   } else if (!opts.organizationId) {
     return [];
   } else {
     folders = await many<Folder>(
       collection(COLLECTIONS.folders).where("organizationId", "==", opts.organizationId),
     );
-    folders.sort((a, b) => a.name.localeCompare(b.name));
+    folders.sort((a, b) => {
+      const posA = a.position ?? 0;
+      const posB = b.position ?? 0;
+      if (posA !== posB) return posA - posB;
+      return a.name.localeCompare(b.name);
+    });
   }
   return filterByFolderAccess(folders, me);
 }
@@ -1893,4 +1898,14 @@ export async function deleteBoardColumn(
   if (removed?.cards.length) {
     await bumpBoardCardCount(boardId, -removed.cards.length);
   }
+}
+
+export async function updateFolderPosition(folderId: string, position: number): Promise<void> {
+  const db = adminDb();
+  await db.collection(COLLECTIONS.folders).doc(folderId).update({ position });
+}
+
+export async function reorderFolderItems(folderId: string, itemIds: string[]): Promise<void> {
+  const db = adminDb();
+  await db.collection(COLLECTIONS.folders).doc(folderId).update({ itemIds });
 }

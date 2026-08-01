@@ -97,6 +97,8 @@ export interface Folder {
   organizationId?: string;
   roles?: ResourceRoles;
   authorId?: string;
+  /** Used for custom sorting of folders in the sidebar. */
+  position?: number;
 }
 
 /** Metadata varies by kind — conversations count messages, files carry bytes. */

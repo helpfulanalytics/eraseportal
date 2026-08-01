@@ -29,7 +29,27 @@ import {
   SearchIcon,
   XIcon,
 } from "lucide-react";
-import { deleteFolderItemAction } from "@/app/(workspace)/actions";
+import { deleteFolderItemAction, reorderFolderItemsAction } from "@/app/(workspace)/actions";
+
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
 import {
   FilePreviewDialog,
   type PreviewFile,
@@ -74,10 +94,12 @@ const AGE_LABEL: Record<Age, string> = {
 };
 
 export function FolderContents({
-  rows,
+  folderId,
+  rows: initialRows,
   canManage,
   toolbarRight,
 }: {
+  folderId: string;
   rows: FolderRow[];
   /** Members can delete from the row menu; clients only read. */
   canManage: boolean;
@@ -87,6 +109,33 @@ export function FolderContents({
   const router = useRouter();
   const people = usePeople();
 
+
+  const [rows, setRows] = useState(initialRows);
+  useEffect(() => {
+    setRows(initialRows);
+  }, [initialRows]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setRows((items) => {
+        const oldIndex = items.findIndex((i) => i.id === active.id);
+        const newIndex = items.findIndex((i) => i.id === over.id);
+        const next = arrayMove(items, oldIndex, newIndex);
+        if (canManage) {
+          startTransition(() => {
+            reorderFolderItemsAction(folderId, next.map((i) => i.id)).catch(() => {});
+          });
+        }
+        return next;
+      });
+    }
+  };
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState<string | null>(null);
   const [age, setAge] = useState<Age>("any");
@@ -254,21 +303,27 @@ export function FolderContents({
               ? "This folder is empty."
               : "Nothing matches those filters."}
           </p>
+
         ) : grid ? (
-          <ul className="grid grid-cols-2 gap-3 pt-4 lg:grid-cols-3 xl:grid-cols-4">
-            {visible.map((row) => (
-              <li key={row.id}>
-                <GridCard
-                  row={row}
-                  busy={busyId === row.id}
-                  canManage={canManage}
-                  onOpen={() => open(row)}
-                  onDelete={() => remove(row)}
-                />
-              </li>
-            ))}
-          </ul>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={visible.map((r) => r.id)} strategy={rectSortingStrategy}>
+              <ul className="grid grid-cols-2 gap-3 pt-4 lg:grid-cols-3 xl:grid-cols-4">
+                {visible.map((row) => (
+                  <SortableGridCardWrapper
+                    key={row.id}
+                    row={row}
+                    busy={busyId === row.id}
+                    canManage={canManage}
+                    filtered={filtered}
+                    onOpen={() => open(row)}
+                    onDelete={() => remove(row)}
+                  />
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
         ) : (
+
           <ul>
             {visible.map((row) => (
               <li
@@ -543,4 +598,78 @@ function ageCutoff(age: Age): number | null {
   if (age === "today") return start.getTime();
   if (age === "week") return start.getTime() - 6 * 24 * 60 * 60 * 1000;
   return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+}
+
+
+function SortableGridCardWrapper(props: any) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ 
+    id: props.row.id, 
+    disabled: !props.canManage || props.filtered 
+  });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 0,
+    position: "relative" as any,
+  };
+
+  return (
+    <li ref={setNodeRef} style={style} {...attributes} {...listeners} className="touch-none">
+      <GridCard {...props} />
+    </li>
+  );
+}
+
+function SortableRowWrapper(props: any) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ 
+    id: props.row.id, 
+    disabled: !props.canManage || props.filtered 
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 0,
+    position: "relative" as any,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "group/row flex items-center gap-4 border-k-black-06 border-b px-3 py-2.5 transition-colors hover:bg-k-black-02 touch-none",
+        props.busy && "opacity-50",
+      )}
+    >
+      <RowTarget row={props.row} onOpen={props.onOpen}>
+        <ItemThumb subject={{ ...props.row, url: props.row.embedUrl }} name={props.row.name} />
+        <span className="min-w-0">
+          <span className="block truncate text-k-black-84 text-md">
+            {props.row.name}
+          </span>
+          <span className="block truncate text-k-black-40 text-md">
+            {props.row.subtitle}
+          </span>
+        </span>
+      </RowTarget>
+
+      <span className="w-[160px] shrink-0 text-k-black-56 text-md">
+        {formatShortDate(props.row.createdAt)}
+      </span>
+
+      <span className="flex w-8 shrink-0 justify-end">
+        <RowMenu
+          row={props.row}
+          canManage={props.canManage}
+          busy={props.busy}
+          onOpen={props.onOpen}
+          onDelete={props.onDelete}
+        />
+      </span>
+    </li>
+  );
 }

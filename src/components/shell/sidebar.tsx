@@ -16,6 +16,27 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { reorderFolderItemsAction } from "@/app/(workspace)/actions";
+import { useTransition } from "react";
+
 import { CreateMenu } from "@/components/kitchen/create-menu";
 import {
   useCurrentUser,
@@ -171,7 +192,7 @@ function SidebarRow({
 }
 
 function CollapsibleFolder({
-  folder,
+  folder: initialFolder,
   orgSlug,
   pathname,
 }: {
@@ -179,6 +200,31 @@ function CollapsibleFolder({
   orgSlug: string;
   pathname: string;
 }) {
+  const [folder, setFolder] = useState(initialFolder);
+  const [, startTransition] = useTransition();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setFolder((prev) => {
+        const oldIndex = prev.items.findIndex((i) => i.id === active.id);
+        const newIndex = prev.items.findIndex((i) => i.id === over.id);
+        const nextItems = arrayMove(prev.items, oldIndex, newIndex);
+        
+        startTransition(() => {
+          reorderFolderItemsAction(prev.id, nextItems.map((i) => i.id)).catch(() => {});
+        });
+
+        return { ...prev, items: nextItems };
+      });
+    }
+  };
+
   const href = `/w/${orgSlug}/folders/${folder.id}`;
   const hasChildren = folder.items.length > 0 || folder.clients.length > 0;
   
@@ -228,45 +274,66 @@ function CollapsibleFolder({
       </div>
 
       {hasChildren && isOpen && (
-        <ul className="flex flex-col gap-px pt-0.5">
-          {folder.items.map((item) => {
-            const itemHref = hrefFor(item, orgSlug);
-            const Icon = iconFor(item);
-            return (
-              <li key={item.id}>
-                <SidebarRow
-                  href={itemHref}
-                  active={pathname === itemHref}
-                  className="pl-8"
-                >
-                  <Icon
-                    className={cn("size-4 shrink-0", !item.color && "text-k-black-56")}
-                    style={item.color ? { color: item.color } : undefined}
-                    strokeWidth={1.6}
-                  />
-                  <span className="truncate">{item.name}</span>
-                </SidebarRow>
-              </li>
-            );
-          })}
-          {folder.clients.map((client) => (
-            <li key={`client:${client.id}`}>
-              <SidebarRow
-                href={`/w/${orgSlug}/settings?tab=members`}
-                active={false}
-                className="pl-8"
-              >
-                <UserIcon
-                  className="size-4 shrink-0"
-                  style={{ color: client.color }}
-                  strokeWidth={1.6}
-                />
-                <span className="truncate">{client.name}</span>
-              </SidebarRow>
-            </li>
-          ))}
-        </ul>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={folder.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+            <ul className="flex flex-col gap-px pt-0.5">
+              {folder.items.map((item) => {
+                const itemHref = hrefFor(item, orgSlug);
+                const Icon = iconFor(item);
+                return (
+                  <SortableSidebarItem key={item.id} id={item.id}>
+                    <SidebarRow
+                      href={itemHref}
+                      active={pathname === itemHref}
+                      className="pl-8 pointer-events-none"
+                    >
+                      <Icon
+                        className={cn("size-4 shrink-0", !item.color && "text-k-black-56")}
+                        style={item.color ? { color: item.color } : undefined}
+                        strokeWidth={1.6}
+                      />
+                      <span className="truncate">{item.name}</span>
+                    </SidebarRow>
+                  </SortableSidebarItem>
+                );
+              })}
+              {folder.clients.map((client) => (
+                <li key={`client:${client.id}`}>
+                  <SidebarRow
+                    href={`/w/${orgSlug}/settings?tab=members`}
+                    active={false}
+                    className="pl-8"
+                  >
+                    <UserIcon
+                      className="size-4 shrink-0"
+                      style={{ color: client.color }}
+                      strokeWidth={1.6}
+                    />
+                    <span className="truncate">{client.name}</span>
+                  </SidebarRow>
+                </li>
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
+    </li>
+  );
+}
+
+function SortableSidebarItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 0,
+    position: "relative" as any,
+  };
+
+  return (
+    <li ref={setNodeRef} style={style} {...attributes} {...listeners} className="touch-none">
+      {children}
     </li>
   );
 }

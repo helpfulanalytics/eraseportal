@@ -68,6 +68,8 @@ import {
   setWorkspaceName,
   toggleReaction,
   updateCard,
+  updateFolderPosition,
+  reorderFolderItems,
   type StarrableKind,
 } from "@/lib/kitchen-data";
 import { sanitizeCanvasNodes } from "@/lib/canvas";
@@ -108,6 +110,27 @@ async function assertOrgAccess(me: Person, folderId: string): Promise<void> {
   if (!folder || folder.organizationId !== me.organizationId) {
     throw new Error("You don't have access to that folder.");
   }
+}
+
+export async function updateFolderPositionAction(
+  folderId: string,
+  position: number,
+): Promise<void> {
+  const me = await requireUser();
+  await assertOrgAccess(me, folderId);
+  await updateFolderPosition(folderId, position);
+  revalidatePath("/w/[orgSlug]", "layout");
+}
+
+export async function reorderFolderItemsAction(
+  folderId: string,
+  itemIds: string[],
+): Promise<void> {
+  const me = await requireUser();
+  await assertOrgAccess(me, folderId);
+  await reorderFolderItems(folderId, itemIds);
+  revalidatePath("/w/[orgSlug]/folders/[folderId]", "page");
+  revalidatePath("/w/[orgSlug]", "layout");
 }
 
 export async function createFolderAction(input: {

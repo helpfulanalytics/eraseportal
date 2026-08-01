@@ -207,6 +207,7 @@ export default async function FolderPage({ params }: PageProps) {
         ) : null}
 
         <FolderContents
+          folderId={folderId}
           rows={items.map((item) => toRow(item, orgSlug, previews, embedUrls))}
           canManage={isAdmin}
           toolbarRight={

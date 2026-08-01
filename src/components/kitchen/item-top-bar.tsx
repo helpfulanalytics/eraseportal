@@ -9,10 +9,20 @@ export function ItemTopBar({
   breadcrumb,
   participants,
   shareTitle,
+  resourceId,
+  resourceType,
+  initialAccess,
+  roles,
+  authorId,
 }: {
   breadcrumb: string;
   participants: string[];
   shareTitle: string;
+  resourceId: string;
+  resourceType: "conversation" | "folder" | "document" | "board" | "embed";
+  initialAccess?: "invited" | "link";
+  roles?: Record<string, "viewer" | "editor" | "full">;
+  authorId?: string;
 }) {
   return (
     <div className="flex h-14 shrink-0 items-center gap-3 px-5">
@@ -21,7 +31,16 @@ export function ItemTopBar({
       </span>
       <div className="ml-auto flex items-center gap-3">
         <AvatarStack personIds={participants} />
-        <ShareDialog title={shareTitle} />
+        {resourceType === "folder" && (
+          <ShareDialog 
+            title={shareTitle} 
+            resourceId={resourceId} 
+            resourceType={resourceType} 
+            initialAccess={initialAccess} 
+            roles={roles}
+            authorId={authorId}
+          />
+        )}
       </div>
     </div>
   );

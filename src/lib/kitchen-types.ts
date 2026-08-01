@@ -69,6 +69,9 @@ export interface Person {
  */
 export type FolderAccess = "private" | "clients" | "internal";
 
+export type Role = "viewer" | "editor" | "full";
+export type ResourceRoles = Record<string, Role>;
+
 export interface Folder {
   id: string;
   name: string;
@@ -92,6 +95,8 @@ export interface Folder {
    * `internalRole` above are still unenforced (see their doc comments).
    */
   organizationId?: string;
+  roles?: ResourceRoles;
+  authorId?: string;
 }
 
 /** Metadata varies by kind — conversations count messages, files carry bytes. */
@@ -200,6 +205,9 @@ export interface Conversation {
   folderId: string;
   participantIds: string[];
   starred: boolean;
+  access?: "invited" | "link";
+  roles?: ResourceRoles;
+  authorId?: string;
 }
 
 export type TaskStatus = "todo" | "in_progress" | "done";
@@ -258,6 +266,9 @@ export interface Board {
   color?: string;
   /** Absent on anything created before the star was wired up — read as false. */
   starred?: boolean;
+  access?: "invited" | "link";
+  roles?: ResourceRoles;
+  authorId?: string;
 }
 
 /**
@@ -362,6 +373,8 @@ export interface KDocument {
    * document isn't destroyed by a deploy.
    */
   blocks: Block[];
+  access?: "invited" | "link";
+  roles?: ResourceRoles;
 }
 
 export interface Embed {
@@ -372,6 +385,9 @@ export interface Embed {
   provider: string;
   /** Absent on anything created before the star was wired up — read as false. */
   starred?: boolean;
+  access?: "invited" | "link";
+  roles?: ResourceRoles;
+  authorId?: string;
 }
 
 /**

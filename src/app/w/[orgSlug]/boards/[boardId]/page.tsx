@@ -30,6 +30,11 @@ export default async function BoardPage({
         breadcrumb={folder?.name ?? ""}
         participants={people}
         shareTitle={board.name}
+        resourceId={boardId}
+        resourceType="board"
+        initialAccess={board.access}
+        roles={board.roles}
+        authorId={board.authorId}
       />
 
       <BoardHeader

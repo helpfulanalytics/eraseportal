@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { FolderIcon, MessageSquareIcon } from "lucide-react";
 import { notFound } from "next/navigation";
 import { FolderCoverButton } from "@/components/kitchen/folder-cover-button";
@@ -86,11 +87,27 @@ function toRow(
 }
 
 // Next 16: params is a Promise and must be awaited.
-export default async function FolderPage({
-  params,
-}: {
+type PageProps = {
   params: Promise<{ orgSlug: string; folderId: string }>;
-}) {
+};
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { folderId } = await params;
+  const folder = await getFolder(folderId);
+  if (!folder) return {};
+  
+  return {
+    title: folder.name,
+    openGraph: {
+      images: [`/api/og?title=${encodeURIComponent(folder.name)}&type=Folder`],
+    },
+    twitter: {
+      images: [`/api/og?title=${encodeURIComponent(folder.name)}&type=Folder`],
+    },
+  };
+}
+
+export default async function FolderPage({ params }: PageProps) {
   const { orgSlug, folderId } = await params;
   const folderMaybe = await getFolder(folderId);
   const me = await requireFolderAccess(folderMaybe);
@@ -117,6 +134,10 @@ export default async function FolderPage({
         breadcrumb={folder.name}
         participants={participants}
         shareTitle={folder.name}
+        resourceId={folderId}
+        resourceType="folder"
+        roles={folder.roles}
+        authorId={folder.authorId}
       />
 
       {folder.coverUrl ? (

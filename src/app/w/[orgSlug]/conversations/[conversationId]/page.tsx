@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { MessageSquareIcon } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Composer } from "@/components/conversation/composer";
@@ -7,7 +8,6 @@ import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { ItemThumb } from "@/components/kitchen/item-thumb";
 import { SubTabs } from "@/components/kitchen/page-title";
 import { AvatarStack } from "@/components/kitchen/person-avatar";
-import { ShareDialog } from "@/components/kitchen/share-dialog";
 import { StarButton } from "@/components/kitchen/star-button";
 import { requireFolderAccess } from "@/lib/access-guard";
 import {
@@ -20,6 +20,27 @@ import {
 import { formatBytes, formatShortDate } from "@/lib/kitchen-format";
 
 // Next 16: both params and searchParams are Promises.
+type PageProps = {
+  params: Promise<{ orgSlug: string; conversationId: string }>;
+};
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { conversationId } = await params;
+  const conversation = await getConversation(conversationId);
+  if (!conversation) return {};
+
+  const title = conversation.name;
+  return {
+    title,
+    openGraph: {
+      images: [`/api/og?title=${encodeURIComponent(title)}&type=Conversation`],
+    },
+    twitter: {
+      images: [`/api/og?title=${encodeURIComponent(title)}&type=Conversation`],
+    },
+  };
+}
+
 export default async function ConversationPage({
   params,
   searchParams,
@@ -66,7 +87,6 @@ export default async function ConversationPage({
           */}
           <div className="ml-auto flex items-center gap-2">
             <AvatarStack personIds={conversation.participantIds} />
-            <ShareDialog title={conversation.name} />
           </div>
         </div>
 

@@ -184,6 +184,17 @@ export async function sendMessageAction(
   });
 
   if (!isNote) {
+    // A Conversation carries no `organizationId` — it reaches its tenant
+    // through its folder — and `/w/…` is keyed by slug, not id. Resolved once
+    // here rather than per recipient inside the notification loop.
+    const folder = await getFolder(conversation.folderId);
+    const organization = folder?.organizationId
+      ? await getOrganization(folder.organizationId)
+      : undefined;
+    const conversationUrl = organization
+      ? `${SITE_URL}/w/${organization.slug}/conversations/${conversation.id}`
+      : SITE_URL;
+
     const recipients = conversation.participantIds.filter((id) => id !== me.id);
     await Promise.all(
       recipients.map(async (id) => {
@@ -196,7 +207,7 @@ export async function sendMessageAction(
             html: `
               <p>${escapeHtml(me.name)} wrote in <strong>${escapeHtml(conversation.name)}</strong>:</p>
               <p>${escapeHtml(trimmed)}</p>
-              <p><a href="${SITE_URL}">Open it</a></p>
+              <p><a href="${conversationUrl}">Open it</a></p>
             `,
           });
 
@@ -209,9 +220,7 @@ export async function sendMessageAction(
                   title: `${me.name} in ${conversation.name}`,
                   body: trimmed,
                 },
-                data: {
-                  url: `${SITE_URL}/w/${conversation.organizationId ?? ''}/conversations/${conversation.id}`
-                }
+                data: { url: conversationUrl }
               });
               
               // Clean up expired or revoked tokens

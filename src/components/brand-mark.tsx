@@ -1,5 +1,6 @@
 /**
- * The Kitchen mark — four quadrant tiles in a 256 box, three outer corners
+ * The Erase Friction Portal mark — four quadrant tiles in a 256 box, three
+ * outer corners
  * rounded to a true quarter-disc, the bottom-right one left square.
  *
  * The square corner is the whole idea. Rounded on all four it reads as the

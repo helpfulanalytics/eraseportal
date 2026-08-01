@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BlockEditor } from "@/components/document/block-editor";
 import { CanvasBoard } from "@/components/document/canvas-board";
@@ -9,11 +10,28 @@ import { docBlocksOf, documentKind } from "@/lib/doc-blocks";
 import { getDocument, getFolder, getPerson } from "@/lib/kitchen-data";
 import { formatShortDate } from "@/lib/kitchen-format";
 
-export default async function DocumentPage({
-  params,
-}: {
+type PageProps = {
   params: Promise<{ orgSlug: string; documentId: string }>;
-}) {
+};
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { documentId } = await params;
+  const doc = await getDocument(documentId);
+  if (!doc) return {};
+  
+  const title = doc.name || "Untitled Document";
+  return {
+    title,
+    openGraph: {
+      images: [`/api/og?title=${encodeURIComponent(title)}&type=Document`],
+    },
+    twitter: {
+      images: [`/api/og?title=${encodeURIComponent(title)}&type=Document`],
+    },
+  };
+}
+
+export default async function DocumentPage({ params }: PageProps) {
   const { documentId } = await params;
   const doc = await getDocument(documentId);
   if (!doc) notFound();
@@ -35,6 +53,11 @@ export default async function DocumentPage({
           breadcrumb={folder?.name ?? ""}
           participants={[doc.authorId]}
           shareTitle={doc.name}
+          resourceId={doc.id}
+          resourceType="document"
+          initialAccess={doc.access}
+          roles={doc.roles}
+          authorId={doc.authorId}
         />
 
         <div className="flex shrink-0 items-center gap-2 px-5 pb-1">
@@ -63,6 +86,11 @@ export default async function DocumentPage({
         breadcrumb={folder?.name ?? ""}
         participants={[doc.authorId]}
         shareTitle={doc.name}
+        resourceId={doc.id}
+        resourceType="document"
+        initialAccess={doc.access}
+        roles={doc.roles}
+        authorId={doc.authorId}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">

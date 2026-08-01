@@ -162,6 +162,14 @@ export async function getOrganizationBySlug(slug: string): Promise<Organization 
 
 /* ---- collections ----------------------------------------------------- */
 
+function filterByFolderAccess(folders: Folder[], me: Person | null): Folder[] {
+  if (!me) return [];
+  if (me.kind === "member") return folders;
+  return folders.filter((folder) => folder.authorId === me.id || folder.roles?.[me.id]);
+}
+
+/* ---- collections ----------------------------------------------------- */
+
 /**
  * Unfiltered when called with no `opts` (members see every organization's
  * folders). Pass `opts` — even `{ organizationId: undefined }`, e.g. a
@@ -176,15 +184,19 @@ export async function getOrganizationBySlug(slug: string): Promise<Organization 
  * organization-scoped folder lists.
  */
 export async function getFolders(opts?: { organizationId?: string }): Promise<Folder[]> {
+  const me = await getCurrentUser();
+  let folders: Folder[];
   if (opts === undefined) {
-    return many<Folder>(collection(COLLECTIONS.folders).orderBy("name"));
+    folders = await many<Folder>(collection(COLLECTIONS.folders).orderBy("name"));
+  } else if (!opts.organizationId) {
+    return [];
+  } else {
+    folders = await many<Folder>(
+      collection(COLLECTIONS.folders).where("organizationId", "==", opts.organizationId),
+    );
+    folders.sort((a, b) => a.name.localeCompare(b.name));
   }
-  if (!opts.organizationId) return [];
-
-  const folders = await many<Folder>(
-    collection(COLLECTIONS.folders).where("organizationId", "==", opts.organizationId),
-  );
-  return folders.sort((a, b) => a.name.localeCompare(b.name));
+  return filterByFolderAccess(folders, me);
 }
 
 /**
@@ -352,6 +364,7 @@ export async function getFolderItems(folderId: string): Promise<FolderItem[]> {
   const items = await many<FolderItem & { downloadUrl?: string }>(
     collection(COLLECTIONS.items).where("folderId", "==", folderId),
   );
+  
   const byId = new Map(items.map((i) => [i.id, withFileUrl(i)]));
 
   return folder.itemIds

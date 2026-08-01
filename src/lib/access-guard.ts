@@ -25,9 +25,14 @@ export async function requireFolderAccess(folder: Folder | undefined): Promise<P
   if (!folder) notFound();
   const me = await getCurrentUser();
   if (!me) notFound();
-  if (me.kind === "client" && folder.organizationId !== me.organizationId) {
-    notFound();
+  
+  if (me.kind === "member") return me;
+
+  if (me.kind === "client") {
+    if (folder.organizationId !== me.organizationId) notFound();
+    if (folder.authorId !== me.id && !folder.roles?.[me.id]) notFound();
   }
+  
   return me;
 }
 

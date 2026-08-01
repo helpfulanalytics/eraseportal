@@ -8,9 +8,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Kitchen leads with Pretendard and falls back to the platform UI font. We ship
-// the fallback only: no network request, no swap, and the metrics the 13/14px
-// scale was tuned against.
+// The app this replaces (kitchen.co) led with Pretendard and fell back to the
+// platform UI font. We ship the fallback only: no network request, no swap,
+// and the metrics the 13/14px scale was tuned against.
 const SANS_STACK = [
   "-apple-system",
   "BlinkMacSystemFont",
@@ -24,8 +24,34 @@ const SANS_STACK = [
 ].join(", ");
 
 export const metadata: Metadata = {
-  title: "Erase Friction Portal",
+  metadataBase: new URL("https://portal.erasefriction.com"),
+  title: {
+    template: "%s | Erase Friction Portal",
+    default: "Erase Friction Portal",
+  },
   description: "Client workspace — folders, conversations, files, and tasks.",
+  openGraph: {
+    title: "Erase Friction Portal",
+    description: "Client workspace — folders, conversations, files, and tasks.",
+    url: "https://portal.erasefriction.com", // Assuming generic URL
+    siteName: "Erase Friction Portal",
+    images: [
+      {
+        url: "/api/og",
+        width: 1200,
+        height: 630,
+        alt: "Erase Friction Portal",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Erase Friction Portal",
+    description: "Client workspace — folders, conversations, files, and tasks.",
+    images: ["/api/og"],
+  },
 };
 
 export default function RootLayout({

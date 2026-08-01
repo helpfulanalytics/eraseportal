@@ -139,7 +139,7 @@
 
   /* ---- shadcn semantic mapping ------------------------------------ */
   /* Mapping these onto the --k-* set means every src/components/ui/*   */
-  /* primitive inherits Kitchen's look without being touched.           */
+  /* primitive inherits the ported look without being touched.          */
   --background: var(--k-white);
   --foreground: #333;
   --card: var(--k-white);
@@ -280,7 +280,7 @@
   --color-k-page: var(--k-page-bg);
 
   /*
-   * Type scale is capped at 14px — Kitchen ships only 10/11/12/13/14 with
+   * Type scale is capped at 14px — the source design ships only 10/11/12/13/14 with
    * line-heights of 16 and 20. Redefining Tailwind's steps downward (rather
    * than adding new names) means a stray `text-base` can't reintroduce 16px.
    * Page titles are the sole exception and use `--text-title`.
@@ -318,7 +318,7 @@
   --text-h3: 16px;
   --text-h3--line-height: 22px;
 
-  /* radius steps map to Kitchen's integer ladder */
+  /* radius steps map to the source design's integer ladder */
   --radius-xs: var(--k-radius-3);
   --radius-sm: var(--k-radius-4);
   --radius-md: var(--k-radius-5);
@@ -335,7 +335,7 @@
   --spacing-sidebar: var(--k-sidebar-width);
 }
 
-/* Kitchen is light-only; the dark block is kept as a structural placeholder. */
+/* The product is light-only; the dark block is kept as a structural placeholder. */
 .dark {
   --background: var(--k-white);
   --foreground: #333;

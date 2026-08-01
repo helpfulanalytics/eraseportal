@@ -23,6 +23,11 @@ export default async function EmbedPage({
         breadcrumb={folder?.name ?? ""}
         participants={[]}
         shareTitle={embed.name}
+        resourceId={embedId}
+        resourceType="embed"
+        initialAccess={embed.access}
+        roles={embed.roles}
+        authorId={embed.authorId}
       />
 
       <div className="shrink-0 px-5 pb-3">

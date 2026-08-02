@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
             flexDirection: "column",
             alignItems: "flex-start",
             justifyContent: "flex-start",
-            background: "linear-gradient(to bottom right, #111111, #000000)", // Premium dark gradient
+            backgroundImage: "linear-gradient(to bottom right, #111111, #000000)", // Premium dark gradient
             padding: "80px",
             fontFamily: "system-ui, sans-serif",
           }}

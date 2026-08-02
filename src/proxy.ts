@@ -44,6 +44,17 @@ function isPublic(pathname: string): boolean {
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
+  const userAgent = request.headers.get("user-agent") || "";
+  const isBot = /bot|whatsapp|facebookexternalhit|slack|twitter|linkedin/i.test(userAgent);
+  if (isBot) {
+    const match = pathname.match(/^\/w\/[^\/]+\/(folders|embeds|documents|conversations|boards)\/([^\/]+)$/);
+    if (match) {
+      const type = match[1];
+      const id = match[2];
+      return NextResponse.rewrite(new URL(`/bot/${type}/${id}`, request.url));
+    }
+  }
+
   const headers = new Headers(request.headers);
   headers.set(PATHNAME_HEADER, `${pathname}${search}`);
 

@@ -326,39 +326,14 @@ export function FolderContents({
 
           <ul>
             {visible.map((row) => (
-              <li
+              <ListRow
                 key={row.id}
-                className={cn(
-                  "group/row flex items-center gap-4 border-k-black-06 border-b px-3 py-2.5 transition-colors hover:bg-k-black-02",
-                  busyId === row.id && "opacity-50",
-                )}
-              >
-                <RowTarget row={row} onOpen={() => open(row)}>
-                  <ItemThumb subject={{ ...row, url: row.embedUrl }} name={row.name} />
-                  <span className="min-w-0">
-                    <span className="block truncate text-k-black-84 text-md">
-                      {row.name}
-                    </span>
-                    <span className="block truncate text-k-black-40 text-md">
-                      {row.subtitle}
-                    </span>
-                  </span>
-                </RowTarget>
-
-                <span className="w-[160px] shrink-0 text-k-black-56 text-md">
-                  {formatShortDate(row.createdAt)}
-                </span>
-
-                <span className="flex w-8 shrink-0 justify-end">
-                  <RowMenu
-                    row={row}
-                    canManage={canManage}
-                    busy={busyId === row.id}
-                    onOpen={() => open(row)}
-                    onDelete={() => remove(row)}
-                  />
-                </span>
-              </li>
+                row={row}
+                busy={busyId === row.id}
+                canManage={canManage}
+                onOpen={() => open(row)}
+                onDelete={() => remove(row)}
+              />
             ))}
           </ul>
         )}
@@ -415,6 +390,10 @@ function GridCard({
   onOpen: () => void;
   onDelete: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); setMenuOpen(true); };
+  const handleDoubleClick = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(true); };
+
   const body = (
     <>
       <ItemThumb subject={{ ...row, url: row.embedUrl }} size="card" name={row.name} />
@@ -429,6 +408,8 @@ function GridCard({
 
   return (
     <div
+      onContextMenu={handleContextMenu}
+      onDoubleClick={handleDoubleClick}
       className={cn(
         "group/card relative flex h-full flex-col rounded-xl border border-k-black-08 p-3 transition-colors hover:border-k-black-16",
         busy && "opacity-50",
@@ -441,6 +422,8 @@ function GridCard({
           busy={busy}
           onOpen={onOpen}
           onDelete={onDelete}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
         />
       </div>
 
@@ -467,12 +450,16 @@ function RowMenu({
   busy,
   onOpen,
   onDelete,
+  open,
+  onOpenChange,
 }: {
   row: FolderRow;
   canManage: boolean;
   busy: boolean;
   onOpen: () => void;
   onDelete: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -495,7 +482,7 @@ function RowMenu({
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger
         aria-label={`Options for ${row.name}`}
         disabled={busy}
@@ -626,6 +613,9 @@ function SortableRowWrapper(props: any) {
     id: props.row.id, 
     disabled: !props.canManage || props.filtered 
   });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); setMenuOpen(true); };
+  const handleDoubleClick = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(true); };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -640,6 +630,8 @@ function SortableRowWrapper(props: any) {
       style={style}
       {...attributes}
       {...listeners}
+      onContextMenu={handleContextMenu}
+      onDoubleClick={handleDoubleClick}
       className={cn(
         "group/row flex items-center gap-4 border-k-black-06 border-b px-3 py-2.5 transition-colors hover:bg-k-black-02 touch-none",
         props.busy && "opacity-50",
@@ -668,6 +660,53 @@ function SortableRowWrapper(props: any) {
           busy={props.busy}
           onOpen={props.onOpen}
           onDelete={props.onDelete}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+        />
+      </span>
+    </li>
+  );
+}
+
+function ListRow(props: any) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); setMenuOpen(true); };
+  const handleDoubleClick = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(true); };
+
+  return (
+    <li
+      onContextMenu={handleContextMenu}
+      onDoubleClick={handleDoubleClick}
+      className={cn(
+        "group/row flex items-center gap-4 border-k-black-06 border-b px-3 py-2.5 transition-colors hover:bg-k-black-02",
+        props.busy && "opacity-50",
+      )}
+    >
+      <RowTarget row={props.row} onOpen={props.onOpen}>
+        <ItemThumb subject={{ ...props.row, url: props.row.embedUrl }} name={props.row.name} />
+        <span className="min-w-0">
+          <span className="block truncate text-k-black-84 text-md">
+            {props.row.name}
+          </span>
+          <span className="block truncate text-k-black-40 text-md">
+            {props.row.subtitle}
+          </span>
+        </span>
+      </RowTarget>
+
+      <span className="w-[160px] shrink-0 text-k-black-56 text-md">
+        {formatShortDate(props.row.createdAt)}
+      </span>
+
+      <span className="flex w-8 shrink-0 justify-end">
+        <RowMenu
+          row={props.row}
+          canManage={props.canManage}
+          busy={props.busy}
+          onOpen={props.onOpen}
+          onDelete={props.onDelete}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
         />
       </span>
     </li>

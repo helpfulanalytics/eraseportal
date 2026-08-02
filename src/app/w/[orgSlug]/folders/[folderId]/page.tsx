@@ -20,7 +20,7 @@ import {
   getFolderItems,
   getOrganizations,
 } from "@/lib/kitchen-data";
-import { formatBytes, formatShortDate, itemHref } from "@/lib/kitchen-format";
+import { formatBytes, formatShortDate, formatUrl, itemHref } from "@/lib/kitchen-format";
 import type { FolderItem, ItemMeta } from "@/lib/kitchen-types";
 
 /**
@@ -88,6 +88,11 @@ function toRow(
     const url = embedUrls[item.id];
     if (url) {
       row.embedUrl = url;
+      if (item.meta.provider === "Link") {
+        row.subtitle = formatUrl(url);
+      } else {
+        row.subtitle = `${item.meta.provider} • ${formatUrl(url)}`;
+      }
     }
   }
 
@@ -202,7 +207,7 @@ export default async function FolderPage({ params }: PageProps) {
             href={folder.url}
             className="mt-1.5 block text-k-black-40 text-md hover:text-k-blue hover:underline"
           >
-            {folder.url}
+            {formatUrl(folder.url)}
           </a>
         ) : null}
 

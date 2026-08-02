@@ -138,3 +138,26 @@ export function formatBytes(bytes: number): string {
   if (kb < 1000) return `${kb.toFixed(kb < 100 ? 2 : 1).replace(/\.?0+$/, "")} kB`;
   return `${(kb / 1000).toFixed(2)} MB`;
 }
+
+/** 
+ * Simplifies a URL for display by removing the protocol, www prefix, 
+ * and truncating long paths (e.g. for folder links or embeds).
+ */
+export function formatUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "");
+    const path = parsed.pathname === "/" ? "" : parsed.pathname;
+    const search = parsed.search || "";
+    const display = host + path + search;
+    if (display.length > 40) {
+      return display.slice(0, 37) + "…";
+    }
+    return display;
+  } catch {
+    if (url.length > 40) {
+      return url.slice(0, 37) + "…";
+    }
+    return url;
+  }
+}

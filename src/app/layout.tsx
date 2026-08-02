@@ -24,7 +24,10 @@ const SANS_STACK = [
 ].join(", ");
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://portal.erasefriction.com"),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || 
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+  ),
   title: {
     template: "%s | Erase Friction Portal",
     default: "Erase Friction Portal",
@@ -33,7 +36,6 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Erase Friction Portal",
     description: "Client workspace — folders, conversations, files, and tasks.",
-    url: "https://portal.erasefriction.com", // Assuming generic URL
     siteName: "Erase Friction Portal",
     images: [
       {

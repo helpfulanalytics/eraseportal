@@ -11,6 +11,7 @@
  * instead, because they're coupled to that route's Storage prefix.
  */
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import {
   addBoardColumn,
   addCardComment,
@@ -84,6 +85,7 @@ import type {
 } from "@/lib/kitchen-types";
 import { adminMessaging } from "@/lib/firebase/admin";
 import { sendEmail } from "@/lib/email/resend";
+import { escapeHtml } from "@/lib/kitchen-format";
 
 /** Every mutation needs an identity; none of them accept one as input. */
 async function requireUser() {
@@ -200,6 +202,7 @@ export async function sendMessageAction(
 
   await sendMessage({
     conversationId,
+    folderId: conversation.folderId,
     authorId: me.id,
     text: trimmed,
     isNote,
@@ -744,16 +747,6 @@ export async function createEmbedAction(
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-function escapeHtml(unsafe: string): string {
-  if (typeof unsafe !== "string") return "";
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
 /** Best-effort — a failed send must never fail the mutation it rides with. */
 async function sendInviteEmail(input: {
   to: string;
@@ -787,7 +780,7 @@ export async function createClientAction(
    * `organizationId`. */
   folderId?: string,
 ): Promise<string> {
-  await requireAdmin();
+  const me = await requireAdmin();
 
   const trimmedName = name.trim();
   const trimmedEmail = email.trim().toLowerCase();
@@ -811,6 +804,7 @@ export async function createClientAction(
     personId: person.id,
     organizationId,
     email: trimmedEmail,
+    invitedByPersonId: me.id,
   });
   await sendInviteEmail({
     to: trimmedEmail,
@@ -825,7 +819,7 @@ export async function createClientAction(
 
 /** "Resend invite" — a fresh token, doesn't touch the client's Person record. */
 export async function resendInviteAction(personId: string): Promise<void> {
-  await requireAdmin();
+  const me = await requireAdmin();
 
   const person = await getPerson(personId);
   if (!person || person.kind !== "client" || !person.organizationId) {
@@ -838,6 +832,7 @@ export async function resendInviteAction(personId: string): Promise<void> {
       personId: person.id,
       organizationId: person.organizationId,
       email: person.email,
+      invitedByPersonId: me.id,
     }),
   ]);
 
@@ -869,6 +864,45 @@ export async function acceptInviteAction(
   if (!organization) throw new Error("That organization no longer exists.");
 
   await markInviteUsed(invite.id);
+
+  // `after()`, not a plain `await`: this is best-effort side-channel work
+  // (see the comment on `sendInviteEmail`) that must never delay routing
+  // the newly-signed-up client into their workspace.
+  if (invite.invitedByPersonId) {
+    const invitedByPersonId = invite.invitedByPersonId;
+    after(async () => {
+      try {
+        const [inviter, client] = await Promise.all([
+          getPerson(invitedByPersonId),
+          getPerson(invite.personId),
+        ]);
+        if (inviter && client) {
+          await sendEmail({
+            to: inviter.email,
+            subject: `${client.name} accepted their invite`,
+            html: `<p><strong>${escapeHtml(client.name)}</strong> accepted their invite to <strong>${escapeHtml(organization.name)}</strong> and can now sign in.</p>`,
+          });
+
+          if (inviter.fcmTokens && inviter.fcmTokens.length > 0) {
+            try {
+              await adminMessaging().sendEachForMulticast({
+                tokens: inviter.fcmTokens,
+                notification: {
+                  title: "Invite accepted",
+                  body: `${client.name} joined ${organization.name}.`,
+                },
+              });
+            } catch (fcmError) {
+              console.error("Couldn't send push notification:", fcmError);
+            }
+          }
+        }
+      } catch (cause) {
+        console.error("Couldn't send invite-accepted notification:", cause);
+      }
+    });
+  }
+
   return { organizationSlug: organization.slug, personId: invite.personId };
 }
 

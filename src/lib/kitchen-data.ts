@@ -104,6 +104,37 @@ function collection(name: string): Query {
   return adminDb().collection(name);
 }
 
+/**
+ * Catches the exact failure mode that hid every folder's count on the
+ * dashboard: an `orderBy` (or any other clause) on a field some documents
+ * don't have silently excludes them from the results, with no error. A
+ * `.count()` aggregate runs the same base query without applying result
+ * transforms like `orderBy`, so a mismatch here means the *fetch* clause —
+ * not the underlying data — is dropping documents.
+ *
+ * Logs and moves on rather than throwing: this is a smoke detector, not a
+ * gate, and a false positive shouldn't take the page down.
+ */
+async function warnIfCountMismatch(
+  label: string,
+  countQuery: Query,
+  fetchedCount: number,
+): Promise<void> {
+  try {
+    const snap = await countQuery.count().get();
+    const actual = snap.data().count;
+    if (actual !== fetchedCount) {
+      console.error(
+        `[data integrity] ${label}: fetched ${fetchedCount} but ${actual} exist — a query clause is silently dropping documents.`,
+      );
+    }
+  } catch (cause) {
+    // Aggregate queries need no new index, but don't let a transient
+    // failure here mask the real result.
+    console.error(`[data integrity] ${label}: count check failed`, cause);
+  }
+}
+
 /* ---- singles --------------------------------------------------------- */
 
 export async function getWorkspace(): Promise<Workspace> {
@@ -187,7 +218,9 @@ export async function getFolders(opts?: { organizationId?: string }): Promise<Fo
   const me = await getCurrentUser();
   let folders: Folder[];
   if (opts === undefined) {
-    folders = await many<Folder>(collection(COLLECTIONS.folders));
+    const base = collection(COLLECTIONS.folders);
+    folders = await many<Folder>(base);
+    void warnIfCountMismatch("getFolders(unfiltered)", base, folders.length);
   } else if (!opts.organizationId) {
     return [];
   } else {
@@ -692,6 +725,7 @@ export async function createFolderFile(input: {
   });
   batch.update(db.collection(COLLECTIONS.folders).doc(input.folderId), {
     itemIds: FieldValue.arrayUnion(id),
+    updatedAt: new Date().toISOString(),
   });
   await batch.commit();
 
@@ -1009,6 +1043,8 @@ function autolink(text: string): Inline[] {
 
 export async function sendMessage(input: {
   conversationId: string;
+  /** Bumps the parent folder's `updatedAt` in the same batch when passed. */
+  folderId?: string;
   authorId: string;
   text: string;
   isNote?: boolean;
@@ -1041,6 +1077,13 @@ export async function sendMessage(input: {
     { meta: { type: "conversation", messageCount: FieldValue.increment(1) } },
     { merge: true },
   );
+  if (input.folderId) {
+    batch.set(
+      db.collection(COLLECTIONS.folders).doc(input.folderId),
+      { updatedAt: new Date().toISOString() },
+      { merge: true },
+    );
+  }
   await batch.commit();
 
   return message;
@@ -1194,6 +1237,7 @@ function linkItemIntoFolder(
   });
   batch.update(db.collection(COLLECTIONS.folders).doc(input.folderId), {
     itemIds: FieldValue.arrayUnion(input.id),
+    updatedAt: new Date().toISOString(),
   });
 }
 
@@ -1604,6 +1648,7 @@ export async function createInvite(input: {
   personId: string;
   organizationId: string;
   email: string;
+  invitedByPersonId?: string;
 }): Promise<Invite> {
   const doc = adminDb().collection(COLLECTIONS.invites).doc();
   const now = new Date();
@@ -1615,6 +1660,7 @@ export async function createInvite(input: {
     email: input.email,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + INVITE_TTL_MS).toISOString(),
+    ...(input.invitedByPersonId ? { invitedByPersonId: input.invitedByPersonId } : {}),
   };
 
   await doc.set(withoutId(invite));

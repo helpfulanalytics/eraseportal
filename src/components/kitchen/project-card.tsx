@@ -17,6 +17,7 @@ export function ProjectCard({
   title,
   subtitle,
   meta,
+  activityLabel,
   color,
 }: {
   href: string;
@@ -25,6 +26,8 @@ export function ProjectCard({
   subtitle?: string;
   /** e.g. "3 folders · 2 clients" or "5 items". */
   meta: ReactNode;
+  /** e.g. "Updated 3h ago" — omitted for a project with no activity yet. */
+  activityLabel?: string;
   /** One of `SWATCH_COLORS`, if the underlying folder/org has one. */
   color?: string;
 }) {
@@ -52,8 +55,11 @@ export function ProjectCard({
           </div>
         </div>
 
-        <div className="border-k-black-06 border-t pt-3 text-k-black-40 text-sm">
-          {meta}
+        <div className="flex items-center justify-between gap-2 border-k-black-06 border-t pt-3 text-k-black-40 text-sm">
+          <span className="truncate">{meta}</span>
+          {activityLabel ? (
+            <span className="shrink-0 text-k-black-40">{activityLabel}</span>
+          ) : null}
         </div>
       </Link>
     </motion.div>

@@ -18,6 +18,8 @@ export interface DashboardCardItem {
   title: string;
   subtitle?: string;
   meta: string;
+  /** e.g. "Updated 3h ago" — absent for a project with no activity yet. */
+  activityLabel?: string;
   color?: string;
 }
 
@@ -130,6 +132,7 @@ export function DashboardProjectGrid({
               title={item.title}
               subtitle={item.subtitle}
               meta={item.meta}
+              activityLabel={item.activityLabel}
               color={item.color}
             />
           ))}

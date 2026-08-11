@@ -92,6 +92,33 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/** Escapes text interpolated into a notification email's HTML body. */
+export function escapeHtml(unsafe: string): string {
+  if (typeof unsafe !== "string") return "";
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/** "3h ago", "yesterday", "2w ago" — the dashboard card's activity stat. */
+export function formatRelativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.round(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  return formatShortDate(iso);
+}
+
 /**
  * First line of a message body, flattened to plain text for a preview row.
  *

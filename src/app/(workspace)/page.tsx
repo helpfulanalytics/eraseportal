@@ -11,6 +11,7 @@ import {
   type DashboardCardItem,
 } from "@/components/kitchen/dashboard-project-grid";
 import { getClients, getCurrentUser, getFolders, getOrganizations } from "@/lib/kitchen-data";
+import { formatRelativeTime } from "@/lib/kitchen-format";
 
 /**
  * Each card now creates the thing it names, opening the same panel the
@@ -68,14 +69,23 @@ export default async function WorkspaceHomePage() {
 
   const dashboardItems: DashboardCardItem[] = isAdmin
     ? organizations.map((org) => {
-        const folderCount = folders.filter((f) => f.organizationId === org.id).length;
+        const orgFolders = folders.filter((f) => f.organizationId === org.id);
+        const folderCount = orgFolders.length;
         const clientCount = clients.filter((c) => c.organizationId === org.id).length;
+        const lastActivityAt = orgFolders
+          .map((f) => f.updatedAt)
+          .filter((iso): iso is string => Boolean(iso))
+          .sort()
+          .at(-1);
         return {
           id: org.id,
           href: `/w/${org.slug}`,
           title: org.name,
           subtitle: org.domain,
           meta: `${folderCount} folder${folderCount === 1 ? "" : "s"} · ${clientCount} client${clientCount === 1 ? "" : "s"}`,
+          activityLabel: lastActivityAt
+            ? `Updated ${formatRelativeTime(lastActivityAt)}`
+            : undefined,
         };
       })
     : // A client only reaches this branch if they somehow have no

@@ -99,6 +99,14 @@ export interface Folder {
   authorId?: string;
   /** Used for custom sorting of folders in the sidebar. */
   position?: number;
+  /**
+   * ISO timestamp of the folder's most recent content-adding activity —
+   * a message sent, a file uploaded, a board/document/embed/conversation
+   * created. Absent on folders untouched since this field was introduced,
+   * or that have never had activity. Powers the dashboard's "Updated …
+   * ago" stat; not bumped by renames, reorders, or other cosmetic edits.
+   */
+  updatedAt?: string;
 }
 
 /** Metadata varies by kind — conversations count messages, files carry bytes. */
@@ -421,6 +429,8 @@ export interface Invite {
   createdAt: string;
   expiresAt: string;
   usedAt?: string;
+  /** The member who sent this invite, if any — notified when it's accepted. */
+  invitedByPersonId?: string;
 }
 
 export interface Template {

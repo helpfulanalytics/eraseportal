@@ -285,7 +285,7 @@ function CollapsibleFolder({
                     <SidebarRow
                       href={itemHref}
                       active={pathname === itemHref}
-                      className="pl-8 pointer-events-none"
+                      className="pl-8"
                     >
                       <Icon
                         className={cn("size-4 shrink-0", !item.color && "text-k-black-56")}

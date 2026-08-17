@@ -40,14 +40,20 @@ const ACCESS: Array<{
 
 export function CreateFolderDialog({
   organizations,
+  parentFolder,
   onClose,
 }: {
   /**
    * Every folder now lives under its organization's `/w/{slug}` portal, so
    * there's no "agency internal, no org" option anymore — the picker is
    * required whenever this dialog can reach more than one org.
+   *
+   * Ignored when `parentFolder` is set — a nested folder inherits its
+   * parent's organization, so there's nothing to pick.
    */
   organizations: Array<{ id: string; name: string; slug: string }>;
+  /** Set when opened from inside a folder — creates a child of it instead. */
+  parentFolder?: { id: string; orgSlug: string };
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -67,9 +73,11 @@ export function CreateFolderDialog({
     nameRef.current?.select();
   }, []);
 
+  const canSubmit = Boolean(name.trim()) && (Boolean(parentFolder) || Boolean(organizationId));
+
   const save = () => {
     const trimmed = name.trim();
-    if (!trimmed || pending || !organizationId) return;
+    if (!trimmed || pending || !canSubmit) return;
     setError(null);
 
     startTransition(async () => {
@@ -79,10 +87,13 @@ export function CreateFolderDialog({
           description,
           access,
           internalRole,
-          organizationId,
+          organizationId: parentFolder ? undefined : organizationId,
+          parentFolderId: parentFolder?.id,
         });
         onClose();
-        const slug = organizations.find((o) => o.id === organizationId)?.slug;
+        const slug = parentFolder
+          ? parentFolder.orgSlug
+          : organizations.find((o) => o.id === organizationId)?.slug;
         router.push(`/w/${slug}/folders/${id}`);
       } catch {
         setError("Couldn't create that folder.");
@@ -99,10 +110,10 @@ export function CreateFolderDialog({
 
   return (
     <DialogShell
-      title="Create Folder"
+      title={parentFolder ? "Create Subfolder" : "Create Folder"}
       onClose={onClose}
       onSubmit={save}
-      canSubmit={Boolean(name.trim()) && Boolean(organizationId)}
+      canSubmit={canSubmit}
       pending={pending}
       error={error}
     >
@@ -134,7 +145,7 @@ export function CreateFolderDialog({
           />
         </div>
 
-        {organizations.length > 0 ? (
+        {parentFolder ? null : organizations.length > 0 ? (
           <div>
             <FieldLabel>Organization</FieldLabel>
             <select

@@ -1,14 +1,14 @@
-import { Building2Icon, FolderIcon, UsersIcon } from "lucide-react";
+import { Building2Icon, FolderIcon, PlusIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { DataTable, type Column, type Row } from "@/components/kitchen/data-table";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { NewOrgClientButton } from "@/components/kitchen/admin-dialog-buttons";
-import {
-  DashboardProjectGrid,
-  type DashboardCardItem,
-} from "@/components/kitchen/dashboard-project-grid";
+import { CreateMenu } from "@/components/kitchen/create-menu";
+import { type DashboardCardItem } from "@/components/kitchen/dashboard-project-grid";
+import { FolderBoard } from "@/components/kitchen/folder-board";
 import { requireOrgWorkspaceAccess } from "@/lib/access-guard";
 import { getClients, getFolders } from "@/lib/kitchen-data";
+import { formatRelativeTime } from "@/lib/kitchen-format";
 
 /**
  * An org's workspace home. Admins get the management view (folder list,
@@ -45,7 +45,7 @@ export default async function OrgWorkspaceHomePage({
           Your workspace — jump into a folder to see what&apos;s going on.
         </p>
         <div className="mt-8">
-          <DashboardProjectGrid isAdmin={false} items={items} />
+          <FolderBoard orgSlug={orgSlug} items={items} />
         </div>
       </div>
     );
@@ -55,20 +55,16 @@ export default async function OrgWorkspaceHomePage({
     (c) => c.organizationId === organization.id,
   );
 
-  const folderColumns: Column[] = [{ key: "name", label: "Folder", sorted: "asc" }];
-  const folderRows: Row[] = folders.map((folder) => ({
+  const folderItems: DashboardCardItem[] = folders.map((folder) => ({
     id: folder.id,
     href: `/w/${orgSlug}/folders/${folder.id}`,
-    cells: {
-      name: (
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded bg-k-black-06 text-k-black-64">
-            <FolderIcon className="size-3.5" strokeWidth={1.7} />
-          </span>
-          <span className="truncate text-k-black-84 text-md">{folder.name}</span>
-        </div>
-      ),
-    },
+    title: folder.name,
+    subtitle: folder.description,
+    meta: `${folder.itemIds.length} item${folder.itemIds.length === 1 ? "" : "s"}`,
+    activityLabel: folder.updatedAt
+      ? `Updated ${formatRelativeTime(folder.updatedAt)}`
+      : undefined,
+    color: folder.color,
   }));
 
   const clientColumns: Column[] = [
@@ -108,12 +104,25 @@ export default async function OrgWorkspaceHomePage({
           <FolderIcon className="size-4 text-k-black-56" strokeWidth={1.7} />
           <h2 className="font-medium text-k-black-84 text-section">Folders</h2>
         </div>
-        <DataTable
-          className="mt-4"
-          columns={folderColumns}
-          rows={folderRows}
-          empty="No folders in this organization yet. Create one from the workspace Create menu."
-        />
+        <div className="mt-4">
+          <FolderBoard
+            orgSlug={orgSlug}
+            items={folderItems}
+            isAdmin
+            createSlot={
+              <CreateMenu
+                initial="folder"
+                organizations={[
+                  { id: organization.id, name: organization.name, slug: orgSlug },
+                ]}
+                triggerClassName="flex h-8 items-center gap-1.5 rounded-lg bg-k-blue px-3 text-k-white text-md transition-opacity hover:opacity-90"
+              >
+                <PlusIcon className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
+                New folder
+              </CreateMenu>
+            }
+          />
+        </div>
       </section>
 
       <section className="mt-10">

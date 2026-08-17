@@ -72,14 +72,21 @@ const TITLE = Object.fromEntries(ROWS.map((r) => [r.key, r.label])) as Record<
 
 export function CreateMenu({
   folderId,
+  orgSlug,
   folders = [],
   organizations = [],
   triggerClassName,
   initial,
   children,
 }: {
-  /** Set when opened from a folder — the dialogs then skip their picker. */
+  /**
+   * Set when opened from a folder — item dialogs then skip their folder
+   * picker, and the Folder row (with `orgSlug` below) creates a *subfolder*
+   * of this one instead of a top-level folder.
+   */
   folderId?: string;
+  /** Required alongside `folderId` for the Folder row to nest under it. */
+  orgSlug?: string;
   /**
    * Choices for the dialogs' folder picker. `organizationSlug`, when
    * present, is used to redirect into the right org's `/w/{slug}` portal
@@ -115,7 +122,11 @@ export function CreateMenu({
 
   const dialogs =
     dialog === "folder" ? (
-      <CreateFolderDialog organizations={organizations} onClose={() => setDialog(null)} />
+      <CreateFolderDialog
+        organizations={organizations}
+        parentFolder={folderId && orgSlug ? { id: folderId, orgSlug } : undefined}
+        onClose={() => setDialog(null)}
+      />
     ) : dialog ? (
       <CreateItemDialog
         type={dialog}

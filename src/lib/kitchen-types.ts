@@ -95,6 +95,13 @@ export interface Folder {
    * `internalRole` above are still unenforced (see their doc comments).
    */
   organizationId?: string;
+  /**
+   * The folder this one was created inside of, if any. Absent means
+   * top-level — the only kind that existed before nesting, and still the
+   * only kind the sidebar tree renders. Always shares `organizationId` with
+   * its parent; a folder is never moved to a different org's tree.
+   */
+  parentFolderId?: string;
   roles?: ResourceRoles;
   authorId?: string;
   /** Used for custom sorting of folders in the sidebar. */

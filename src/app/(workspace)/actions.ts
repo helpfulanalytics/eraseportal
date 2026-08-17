@@ -141,6 +141,7 @@ export async function createFolderAction(input: {
   access?: FolderAccess;
   internalRole?: "viewer" | "editor";
   organizationId?: string;
+  parentFolderId?: string;
 }): Promise<string> {
   await requireAdmin();
 

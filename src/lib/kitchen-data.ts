@@ -213,8 +213,19 @@ function filterByFolderAccess(folders: Folder[], me: Person | null): Folder[] {
  * composite index (see the `messages` index in firestore.indexes.json for
  * the same situation), and this avoids requiring a new one just for
  * organization-scoped folder lists.
+ *
+ * `parentFolderId` filters after the fetch rather than as a second `.where`,
+ * for the same reason — one more equality filter would still dodge the
+ * composite-index requirement (it only kicks in with an `.orderBy`), but the
+ * in-memory pass here is simpler than threading a second, conditionally-
+ * present `.where` through the two query branches above. Pass `null` for
+ * top-level folders only (e.g. the sidebar), a string for one folder's
+ * children, or omit it for every folder regardless of nesting.
  */
-export async function getFolders(opts?: { organizationId?: string }): Promise<Folder[]> {
+export async function getFolders(opts?: {
+  organizationId?: string;
+  parentFolderId?: string | null;
+}): Promise<Folder[]> {
   const me = await getCurrentUser();
   let folders: Folder[];
   if (opts === undefined) {
@@ -227,6 +238,9 @@ export async function getFolders(opts?: { organizationId?: string }): Promise<Fo
     folders = await many<Folder>(
       collection(COLLECTIONS.folders).where("organizationId", "==", opts.organizationId),
     );
+  }
+  if (opts?.parentFolderId !== undefined) {
+    folders = folders.filter((f) => (f.parentFolderId ?? null) === opts.parentFolderId);
   }
   folders.sort((a, b) => {
     const posA = a.position ?? 0;
@@ -527,9 +541,14 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
  *
  * Pass `organizationId` for a client's session so folders outside their
  * organization never reach the sidebar at all.
+ *
+ * Only top-level folders — nested ones are reached by drilling in from
+ * their parent's page, not from the flat sidebar tree.
  */
 export async function getNavTree(opts?: { organizationId?: string }): Promise<NavFolder[]> {
-  const folders = await getFolders(opts);
+  const folders = opts === undefined
+    ? (await getFolders()).filter((f) => !f.parentFolderId)
+    : await getFolders({ organizationId: opts.organizationId, parentFolderId: null });
   return Promise.all(
     folders.map(async (folder) => {
       // getFolderItems already carries kind + meta for everything (in the
@@ -759,8 +778,18 @@ export async function createFolder(input: {
   internalRole?: "viewer" | "editor";
   /** Absent = agency-internal, no client can ever see it. */
   organizationId?: string;
+  /**
+   * The folder this one nests inside, if any. Its `organizationId` wins over
+   * `input.organizationId` — a nested folder always shares its parent's org,
+   * so the parent picker a nested-create flow skips can't disagree with it.
+   */
+  parentFolderId?: string;
 }): Promise<Folder> {
   await ensureWorkspace();
+
+  const organizationId = input.parentFolderId
+    ? (await getFolder(input.parentFolderId))?.organizationId ?? input.organizationId
+    : input.organizationId;
 
   const doc = adminDb().collection(COLLECTIONS.folders).doc();
   const folder: Folder = {
@@ -775,7 +804,8 @@ export async function createFolder(input: {
     ...(input.access === "internal" && input.internalRole
       ? { internalRole: input.internalRole }
       : {}),
-    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+    ...(organizationId ? { organizationId } : {}),
+    ...(input.parentFolderId ? { parentFolderId: input.parentFolderId } : {}),
   };
 
   await doc.set(withoutId(folder));
@@ -846,6 +876,19 @@ export async function deleteFolder(folderId: string): Promise<void> {
       `This folder still has ${folder.itemIds.length} item(s) in it. Move or delete them first.`,
     );
   }
+
+  // Subfolders live as their own docs (`parentFolderId`, not `itemIds`), so
+  // the check above misses them — without this, deleting a parent would
+  // leave children pointing at a `parentFolderId` that no longer exists.
+  const children = folder.organizationId
+    ? await getFolders({ organizationId: folder.organizationId, parentFolderId: folderId })
+    : (await getFolders()).filter((f) => f.parentFolderId === folderId);
+  if (children.length > 0) {
+    throw new Error(
+      `This folder still has ${children.length} subfolder(s) in it. Delete them first.`,
+    );
+  }
+
   await adminDb().collection(COLLECTIONS.folders).doc(folderId).delete();
 }
 

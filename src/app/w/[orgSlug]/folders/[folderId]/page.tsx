@@ -10,6 +10,7 @@ import { FolderDescription } from "@/components/kitchen/folder-description";
 import { FolderHeaderControls } from "@/components/kitchen/folder-header-controls";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
 import { CreateMenu } from "@/components/kitchen/create-menu";
+import { FolderTile, type FolderBoardItem } from "@/components/kitchen/folder-board";
 import { StarButton } from "@/components/kitchen/star-button";
 import { UploadButton } from "@/components/kitchen/upload-button";
 import { requireFolderAccess } from "@/lib/access-guard";
@@ -18,9 +19,16 @@ import {
   getEmbedUrls,
   getFolder,
   getFolderItems,
+  getFolders,
   getOrganizations,
 } from "@/lib/kitchen-data";
-import { formatBytes, formatShortDate, formatUrl, itemHref } from "@/lib/kitchen-format";
+import {
+  formatBytes,
+  formatRelativeTime,
+  formatShortDate,
+  formatUrl,
+  itemHref,
+} from "@/lib/kitchen-format";
 import type { FolderItem, ItemMeta } from "@/lib/kitchen-types";
 
 /**
@@ -129,6 +137,10 @@ export default async function FolderPage({ params }: PageProps) {
   const isAdmin = me.kind === "member";
   const organizations = isAdmin ? await getOrganizations() : [];
 
+  const subfolders = folder.organizationId
+    ? await getFolders({ organizationId: folder.organizationId, parentFolderId: folderId })
+    : (await getFolders()).filter((f) => f.parentFolderId === folderId);
+
   const items = await getFolderItems(folderId);
   const participants = [...new Set(items.map((i) => i.authorId))];
 
@@ -211,6 +223,28 @@ export default async function FolderPage({ params }: PageProps) {
           </a>
         ) : null}
 
+        {subfolders.length > 0 ? (
+          <section className="mt-7">
+            <h2 className="mb-3 font-medium text-k-black-56 text-md">Subfolders</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {subfolders.map((sub) => {
+                const item: FolderBoardItem = {
+                  id: sub.id,
+                  href: `/w/${orgSlug}/folders/${sub.id}`,
+                  title: sub.name,
+                  subtitle: sub.description,
+                  meta: `${sub.itemIds.length} item${sub.itemIds.length === 1 ? "" : "s"}`,
+                  activityLabel: sub.updatedAt
+                    ? `Updated ${formatRelativeTime(sub.updatedAt)}`
+                    : undefined,
+                  color: sub.color,
+                };
+                return <FolderTile key={sub.id} item={item} href={item.href} />;
+              })}
+            </div>
+          </section>
+        ) : null}
+
         <FolderContents
           folderId={folderId}
           rows={items.map((item) => toRow(item, orgSlug, previews, embedUrls))}
@@ -220,6 +254,7 @@ export default async function FolderPage({ params }: PageProps) {
               {isAdmin ? (
                 <CreateMenu
                   folderId={folderId}
+                  orgSlug={orgSlug}
                   organizations={organizations}
                   triggerClassName="h-8 gap-1.5 rounded-lg bg-k-black-06 px-3 text-k-black-84 hover:bg-k-black-08"
                 />

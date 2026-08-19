@@ -15,7 +15,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminBucket, adminDb } from "./firebase/admin";
+import { adminBucket, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
 import { docBlocksOf, docPreview, documentKind, newBlockId } from "./doc-blocks";
 import { blockPreview, SWATCH_COLORS } from "./kitchen-format";
@@ -43,6 +43,7 @@ import type {
   ItemKind,
   ItemMeta,
   KDocument,
+  MemberRole,
   LibraryFile,
   Message,
   NavFolder,
@@ -265,6 +266,34 @@ export async function getClients(): Promise<Person[]> {
   return many<Person>(
     collection(COLLECTIONS.people).where("kind", "==", "client"),
   );
+}
+
+/**
+ * The agency roster — everyone the Team page lists, deactivated people
+ * included, since removal is reversible and a removed member still needs a
+ * row to be restored from. Callers that want only working members filter on
+ * `isActive` from `permissions.ts`.
+ */
+export async function getMembers(): Promise<Person[]> {
+  const members = await many<Person>(
+    collection(COLLECTIONS.people).where("kind", "==", "member"),
+  );
+  return members.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Used to reject an invite to an address that already has a Person — without
+ * it, a second invite would create a duplicate directory entry, and the
+ * email-adoption branch in `getCurrentUser` would then resolve whichever one
+ * the query happened to return first.
+ */
+export async function getPersonByEmail(
+  email: string,
+): Promise<Person | undefined> {
+  const matches = await many<Person>(
+    collection(COLLECTIONS.people).where("email", "==", email).limit(1),
+  );
+  return matches[0];
 }
 
 export async function getOrganizations(): Promise<Organization[]> {
@@ -601,6 +630,16 @@ export async function getBoardsInFolder(folderId: string): Promise<Board[]> {
  * Auth identity and workspace identity are separate: Firebase knows a uid,
  * the workspace knows a Person. They're joined by the `uid` field written to
  * the person document on first sign-in.
+ *
+ * **The workspace is invite-only.** Authenticating proves who you are, not
+ * that you belong here — an account with no corresponding Person resolves to
+ * `null`, exactly like being signed out. This used to auto-provision such an
+ * account as `kind: "member"`, which meant anyone who completed the public
+ * sign-up form became an admin over every organization. A Person now comes
+ * into existence only through an invite (`createClient` / `createMember`) or
+ * the seed script. `(workspace)/layout.tsx` distinguishes the two `null`
+ * cases and routes an authenticated stranger to `/no-access`, so the dead end
+ * is explained rather than silently looping back to sign-in.
  */
 export async function getCurrentUser(): Promise<Person | null> {
   const session = await getSessionUser();
@@ -609,7 +648,13 @@ export async function getCurrentUser(): Promise<Person | null> {
   const byUid = await many<Person>(
     collection(COLLECTIONS.people).where("uid", "==", session.uid).limit(1),
   );
-  if (byUid.length > 0) return byUid[0];
+  // Checked on both branches: removal sets `deactivatedAt` rather than
+  // deleting the document (see `Person.deactivatedAt`), so this is the read
+  // that has to enforce it. Their existing session cookie is revoked at
+  // removal time too — this covers the gap either way round.
+  if (byUid.length > 0) {
+    return byUid[0].deactivatedAt ? null : byUid[0];
+  }
 
   // First sign-in for someone seeded by email but never linked: adopt them.
   if (session.email) {
@@ -619,6 +664,7 @@ export async function getCurrentUser(): Promise<Person | null> {
         .limit(1),
     );
     if (byEmail.length > 0) {
+      if (byEmail[0].deactivatedAt) return null;
       await adminDb()
         .collection(COLLECTIONS.people)
         .doc(byEmail[0].id)
@@ -627,16 +673,7 @@ export async function getCurrentUser(): Promise<Person | null> {
     }
   }
 
-  // Authenticated, but nobody in the workspace corresponds to them — which is
-  // every account created through /sign-up, since that only ever made a
-  // Firebase auth user. Without this, signing up succeeded and then bounced
-  // you straight back to sign-in with no explanation.
-  //
-  // Note what this implies: anyone who can complete the sign-up form gets a
-  // workspace identity. That matches what the sign-up page currently offers.
-  // To make the workspace invite-only, delete this call and seed people ahead
-  // of time — the email-matching branch above is then the only way in.
-  return provisionPerson(session);
+  return null;
 }
 
 /** Avatar tints, matching the palette the seeded people use. */
@@ -655,44 +692,12 @@ function initialsFrom(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-/**
- * Create the Person for a freshly authenticated account.
- *
- * The document id is the auth uid rather than a hand-picked slug like
- * `tosin`: seeded people keep their readable ids, and anyone who signs up
- * gets a collision-free one for free.
- */
-async function provisionPerson(session: {
-  uid: string;
-  email: string | undefined;
-}): Promise<Person> {
-  const authUser = await adminAuth().getUser(session.uid);
-  const email = session.email ?? authUser.email ?? "";
-  const name = authUser.displayName?.trim() || email.split("@")[0] || "Member";
-
-  // Deterministic so the same person keeps the same tint across re-provisions.
-  const tint =
-    PERSON_COLORS[
-      Math.abs(
-        [...session.uid].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0),
-      ) % PERSON_COLORS.length
-    ];
-
-  const person: Person = {
-    id: session.uid,
-    name,
-    handle: (email.split("@")[0] || name).toLowerCase(),
-    email,
-    initials: initialsFrom(name),
-    color: tint,
-    kind: "member",
-    uid: session.uid,
-  };
-
-  const { id, ...rest } = person;
-  await adminDb().collection(COLLECTIONS.people).doc(id).set(rest, { merge: true });
-
-  return person;
+/** Deterministic tint, so a person's avatar colour never moves. */
+function tintFor(id: string): string {
+  return PERSON_COLORS[
+    Math.abs([...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) %
+      PERSON_COLORS.length
+  ];
 }
 
 /* ---- writes ---------------------------------------------------------- */
@@ -1684,12 +1689,106 @@ export async function createClient(input: {
   return person;
 }
 
-/** A client's invite link is valid for a week. */
+/**
+ * Adds an agency member to the workspace directory.
+ *
+ * The mirror of `createClient` above, and deliberately the same shape: a
+ * member is also just a Person, also has no `uid` until first sign-in, and is
+ * also adopted by `getCurrentUser` on the email match. The only differences
+ * are `kind` and that a member belongs to the workspace rather than to one
+ * organization — hence no `organizationId`.
+ *
+ * With `provisionPerson` gone, this and `createClient` are the only two ways
+ * a Person is ever born outside the seed script.
+ */
+export async function createMember(input: {
+  name: string;
+  email: string;
+  memberRole: MemberRole;
+}): Promise<Person> {
+  const doc = adminDb().collection(COLLECTIONS.people).doc();
+
+  const person: Person = {
+    id: doc.id,
+    name: input.name,
+    handle: (input.email.split("@")[0] || input.name).toLowerCase(),
+    email: input.email,
+    initials: initialsFrom(input.name),
+    color: tintFor(doc.id),
+    kind: "member",
+    memberRole: input.memberRole,
+  };
+
+  await doc.set(withoutId(person));
+  return person;
+}
+
+export async function setMemberRole(
+  personId: string,
+  role: MemberRole,
+): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.people)
+    .doc(personId)
+    .set({ memberRole: role }, { merge: true });
+}
+
+/**
+ * Ownership moves as one write. Two `setMemberRole` calls would leave a
+ * window with two owners (or, if the second failed, none at all) — a batch
+ * makes the transfer atomic.
+ */
+export async function transferOwnership(input: {
+  fromPersonId: string;
+  toPersonId: string;
+}): Promise<void> {
+  const db = adminDb();
+  const batch = db.batch();
+  batch.set(
+    db.collection(COLLECTIONS.people).doc(input.toPersonId),
+    { memberRole: "owner" },
+    { merge: true },
+  );
+  batch.set(
+    db.collection(COLLECTIONS.people).doc(input.fromPersonId),
+    { memberRole: "admin" },
+    { merge: true },
+  );
+  await batch.commit();
+}
+
+/**
+ * Removal, as a soft delete — see `Person.deactivatedAt` for why the document
+ * survives. Revoking their Firebase session is the caller's job
+ * (`removeMemberAction`), since this module doesn't reach into auth.
+ */
+export async function deactivateMember(personId: string): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.people)
+    .doc(personId)
+    .set({ deactivatedAt: new Date().toISOString() }, { merge: true });
+}
+
+export async function reactivateMember(personId: string): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.people)
+    .doc(personId)
+    .update({ deactivatedAt: FieldValue.delete() });
+}
+
+/** An invite link is valid for a week, member and client alike. */
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Exactly one of `organizationId` (client) and `memberRole` (agency member)
+ * should be set — that pair is what `acceptInviteAction` branches on to work
+ * out where the invitee lands. Both are spread conditionally because
+ * Firestore rejects an explicit `undefined`.
+ */
 export async function createInvite(input: {
   personId: string;
-  organizationId: string;
+  organizationId?: string;
+  memberRole?: MemberRole;
   email: string;
   invitedByPersonId?: string;
 }): Promise<Invite> {
@@ -1699,10 +1798,11 @@ export async function createInvite(input: {
     id: doc.id,
     token: randomUUID(),
     personId: input.personId,
-    organizationId: input.organizationId,
     email: input.email,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + INVITE_TTL_MS).toISOString(),
+    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+    ...(input.memberRole ? { memberRole: input.memberRole } : {}),
     ...(input.invitedByPersonId ? { invitedByPersonId: input.invitedByPersonId } : {}),
   };
 

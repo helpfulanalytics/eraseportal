@@ -1,11 +1,26 @@
 "use server";
 
+/**
+ * Sharing mutations for folders, boards, documents, embeds and conversations.
+ *
+ * Both actions here used to check only that *someone* was signed in, with a
+ * TODO where the authorization belonged. Server actions are POST endpoints
+ * whether or not any UI calls them — and the share dialog's role UI is behind
+ * `FLAGS.shareDialog`, so nothing exercised them — which meant any client
+ * could post a resource id and write themselves into its `roles` map. Since
+ * `filterByFolderAccess` and `requireFolderAccess` treat the presence of a
+ * key there as access, that was a way to open any resource in their
+ * organization. `requireResourceManage` is that missing check.
+ */
+import { revalidatePath } from "next/cache";
 import { adminDb } from "@/lib/firebase/admin";
-import { getSessionUser } from "@/lib/firebase/session";
+import {
+  assertGrantablePerson,
+  requireResourceManage,
+  type ShareableType,
+} from "@/lib/access-guard";
 
-type ResourceType = "conversation" | "folder" | "document" | "board" | "embed";
-
-const COLLECTIONS: Record<ResourceType, string> = {
+const COLLECTIONS: Record<ShareableType, string> = {
   conversation: "conversations",
   folder: "folders",
   document: "documents",
@@ -15,51 +30,45 @@ const COLLECTIONS: Record<ResourceType, string> = {
 
 export async function updateResourceAccess(
   resourceId: string,
-  resourceType: ResourceType,
+  resourceType: ShareableType,
   access: "invited" | "link",
 ) {
-  const session = await getSessionUser();
-  if (!session) {
-    throw new Error("Must be signed in to change access");
-  }
+  await requireResourceManage(resourceType, resourceId);
 
-  // TODO: Verify if the user has permission to change access for this resource.
-  // For now, we update it if they are logged in.
-
-  const collectionName = COLLECTIONS[resourceType];
-  
   await adminDb()
-    .collection(collectionName)
+    .collection(COLLECTIONS[resourceType])
     .doc(resourceId)
     .update({ access });
+
+  revalidatePath("/w/[orgSlug]", "layout");
 }
 
 export async function setResourceRole(
   resourceId: string,
-  resourceType: ResourceType,
+  resourceType: ShareableType,
   personId: string,
   role: "viewer" | "editor" | "full" | null,
 ) {
-  const session = await getSessionUser();
-  if (!session) {
-    throw new Error("Must be signed in to change roles");
+  const { organizationId } = await requireResourceManage(
+    resourceType,
+    resourceId,
+  );
+
+  // Granting checks the recipient; revoking doesn't need to. Removing a
+  // stale grant should keep working even if the person it names has since
+  // been removed from the workspace — that's cleanup, not escalation.
+  if (role !== null) {
+    await assertGrantablePerson(personId, organizationId);
   }
 
-  // TODO: Verify if the user has permission to change roles (is admin or full access)
-
-  const collectionName = COLLECTIONS[resourceType];
-  const ref = adminDb().collection(collectionName).doc(resourceId);
+  const ref = adminDb().collection(COLLECTIONS[resourceType]).doc(resourceId);
 
   if (role === null) {
-    // Remove the role
     const { FieldValue } = await import("firebase-admin/firestore");
-    await ref.update({
-      [`roles.${personId}`]: FieldValue.delete(),
-    });
+    await ref.update({ [`roles.${personId}`]: FieldValue.delete() });
   } else {
-    // Set the role
-    await ref.update({
-      [`roles.${personId}`]: role,
-    });
+    await ref.update({ [`roles.${personId}`]: role });
   }
+
+  revalidatePath("/w/[orgSlug]", "layout");
 }

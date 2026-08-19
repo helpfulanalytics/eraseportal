@@ -34,14 +34,17 @@ export function PasswordStep({
   token,
   email,
   name,
-  organizationName,
+  destinationName,
+  audience,
   onDone,
 }: {
   token: string;
   email: string;
   name: string;
-  organizationName: string;
-  onDone: (result: { personId: string; organizationSlug: string }) => void;
+  /** The organization's name for a client, the workspace's for a member. */
+  destinationName: string;
+  audience: "member" | "client";
+  onDone: (result: { personId: string; destination: string }) => void;
 }) {
   const [password, setPassword] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -78,7 +81,9 @@ export function PasswordStep({
             Create a password
           </h1>
           <p className="mt-1.5 text-muted-foreground text-sm">
-            You&apos;re joining {organizationName}&apos;s workspace.
+            {audience === "member"
+              ? `You're joining the ${destinationName} team.`
+              : `You're joining ${destinationName}'s workspace.`}
           </p>
         </motion.div>
 

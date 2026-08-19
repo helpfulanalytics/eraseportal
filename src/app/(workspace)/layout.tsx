@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { PATHNAME_HEADER } from "@/proxy";
+import { getSessionUser } from "@/lib/firebase/session";
 import { MinimalShell } from "@/components/shell/minimal-shell";
 import { WorkspaceProvider } from "@/components/workspace-provider";
 import {
@@ -27,11 +28,20 @@ export default async function WorkspaceLayout({
   const currentUser = await getCurrentUser();
 
   if (!currentUser) {
-    // Reached with a cookie that exists but doesn't verify — expired, revoked,
-    // or minted for another project. The proxy waved it through on presence
-    // alone, so this is where it actually gets rejected. Carry the destination
-    // so the visitor resumes where they were aiming rather than at the
-    // workspace root.
+    // Two different failures land here, and they need different answers.
+    //
+    // A verifying session with no Person means an authenticated stranger —
+    // the workspace is invite-only, so nobody provisions them a place. Send
+    // them somewhere that says so; bouncing them to sign-in would just let
+    // them sign in again and arrive back here with no explanation.
+    //
+    // No verifying session means a cookie that exists but doesn't check out —
+    // expired, revoked, or minted for another project. The proxy waved it
+    // through on presence alone, so this is where it actually gets rejected.
+    // Carry the destination so the visitor resumes where they were aiming
+    // rather than at the workspace root.
+    if (await getSessionUser()) redirect("/no-access");
+
     const pathname = (await headers()).get(PATHNAME_HEADER);
     const next = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname)}` : "";
     redirect(`/sign-in${next}`);

@@ -8,15 +8,20 @@ import { ResendInviteButton } from "@/components/kitchen/resend-invite-button";
 import { requireOrgWorkspaceAccess } from "@/lib/access-guard";
 import { getClients } from "@/lib/kitchen-data";
 
-const TABS = ["general", "members", "billing"] as const;
+const TABS = ["general", "clients", "billing"] as const;
 type Tab = (typeof TABS)[number];
 
 /**
  * "Workspace" always means one org now — this replaced the old top-level
  * `/settings`, whose General tab renamed a single global workspace and
  * whose "Workspace URL" field was cosmetic (a `defaultValue` that saved
- * nowhere). Members here is real: this org's clients, not everyone in the
- * whole deployment.
+ * nowhere).
+ *
+ * The Clients tab was called "Members" and never listed a single member: it
+ * has always been `getClients()` filtered to this org. Agency members are
+ * workspace-wide and live at `/team`. Renaming it removes the collision now
+ * that both surfaces exist; `?tab=members` still resolves here so old links
+ * survive.
  */
 export default async function SettingsPage({
   params,
@@ -27,7 +32,12 @@ export default async function SettingsPage({
 }) {
   const { orgSlug } = await params;
   const { tab } = await searchParams;
-  const active: Tab = TABS.includes(tab as Tab) ? (tab as Tab) : "general";
+  // `members` is the tab's old name, kept as an alias so links that predate
+  // the rename don't silently fall back to General.
+  const requested = tab === "members" ? "clients" : tab;
+  const active: Tab = TABS.includes(requested as Tab)
+    ? (requested as Tab)
+    : "general";
 
   const { organization, me } = await requireOrgWorkspaceAccess(orgSlug);
   // Org name, portal link, and the client roster are admin concerns — a
@@ -53,7 +63,7 @@ export default async function SettingsPage({
         {active === "general" ? (
           <General organizationId={organization.id} name={organization.name} orgSlug={orgSlug} />
         ) : null}
-        {active === "members" ? <Members organizationId={organization.id} /> : null}
+        {active === "clients" ? <Clients organizationId={organization.id} /> : null}
         {active === "billing" ? <Billing /> : null}
       </div>
     </div>
@@ -93,14 +103,14 @@ function General({
   );
 }
 
-async function Members({ organizationId }: { organizationId: string }) {
+async function Clients({ organizationId }: { organizationId: string }) {
   const clients = (await getClients()).filter((c) => c.organizationId === organizationId);
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-k-black-40 text-md">
-          Everyone who can sign into this organization&apos;s workspace.
+          Everyone at this organization who can sign into the portal.
         </p>
         <NewOrgClientButton organizationId={organizationId} />
       </div>

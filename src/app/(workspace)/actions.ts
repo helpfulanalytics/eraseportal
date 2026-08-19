@@ -47,6 +47,7 @@ import {
   isInviteExpired,
   getPerson,
   getTasks,
+  getWorkspace,
   markInviteUsed,
   moveCard,
   removeDeviceToken,
@@ -84,7 +85,9 @@ import type {
   Reaction,
 } from "@/lib/kitchen-types";
 import { adminMessaging } from "@/lib/firebase/admin";
-import { sendEmail } from "@/lib/email/resend";
+import { SITE_URL, sendEmail } from "@/lib/email/resend";
+import { sendInviteEmail } from "@/lib/email/invite";
+import { canManageOrganizations } from "@/lib/permissions";
 import { escapeHtml } from "@/lib/kitchen-format";
 
 /** Every mutation needs an identity; none of them accept one as input. */
@@ -94,10 +97,27 @@ async function requireUser() {
   return me;
 }
 
-/** Org/folder/board/client management is admin-only — `kind: "member"`. */
+/**
+ * Folder/board/client management is member-only. Every agency tier passes —
+ * a plain `member` is here to do the work, so gating content creation on the
+ * team hierarchy would make the lower tier useless. The narrower gate is
+ * `requireOrgAdmin` below, and `requireTeamAdmin` in `team-actions.ts`.
+ */
 async function requireAdmin() {
   const me = await requireUser();
   if (me.kind !== "member") throw new Error("Admins only.");
+  return me;
+}
+
+/**
+ * Creating and renaming organizations — an owner/admin concern rather than
+ * something any member does, since an org is the tenant boundary itself.
+ */
+async function requireOrgAdmin() {
+  const me = await requireAdmin();
+  if (!canManageOrganizations(me)) {
+    throw new Error("You don't have permission to manage organizations.");
+  }
   return me;
 }
 
@@ -565,7 +585,7 @@ export async function createTaskAction(input: {
 }
 
 export async function renameWorkspaceAction(name: string): Promise<void> {
-  await requireAdmin();
+  await requireOrgAdmin();
 
   const trimmed = name.trim();
   if (!trimmed) throw new Error("The workspace needs a name.");
@@ -578,7 +598,7 @@ export async function createOrganizationAction(
   name: string,
   domain: string,
 ): Promise<{ id: string; slug: string }> {
-  await requireAdmin();
+  await requireOrgAdmin();
 
   const trimmedName = name.trim();
   const trimmedDomain = domain.trim();
@@ -597,7 +617,7 @@ export async function renameOrganizationAction(
   organizationId: string,
   name: string,
 ): Promise<void> {
-  await requireAdmin();
+  await requireOrgAdmin();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("An organization needs a name.");
 
@@ -746,32 +766,6 @@ export async function createEmbedAction(
   return embed.id;
 }
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-
-/** Best-effort — a failed send must never fail the mutation it rides with. */
-async function sendInviteEmail(input: {
-  to: string;
-  personName: string;
-  organizationName: string;
-  token: string;
-}): Promise<void> {
-  try {
-    const link = `${SITE_URL}/invite/${input.token}`;
-    await sendEmail({
-      to: input.to,
-      subject: `You're invited to ${input.organizationName}`,
-      html: `
-        <p>Hi ${escapeHtml(input.personName)},</p>
-        <p>You've been invited to ${escapeHtml(input.organizationName)}'s workspace.</p>
-        <p><a href="${link}">Set your password and get started</a></p>
-        <p>This link expires in 7 days.</p>
-      `,
-    });
-  } catch (cause) {
-    console.error("Couldn't send invite email:", cause);
-  }
-}
-
 export async function createClientAction(
   name: string,
   email: string,
@@ -810,8 +804,9 @@ export async function createClientAction(
   await sendInviteEmail({
     to: trimmedEmail,
     personName: trimmedName,
-    organizationName: organization?.name ?? "your workspace",
+    destinationName: organization?.name ?? "your workspace",
     token: invite.token,
+    audience: "client",
   });
 
   revalidatePath("/w/[orgSlug]", "layout");
@@ -840,8 +835,9 @@ export async function resendInviteAction(personId: string): Promise<void> {
   await sendInviteEmail({
     to: person.email,
     personName: person.name,
-    organizationName: organization?.name ?? "your workspace",
+    destinationName: organization?.name ?? "your workspace",
     token: invite.token,
+    audience: "client",
   });
 }
 
@@ -850,10 +846,15 @@ export async function resendInviteAction(personId: string): Promise<void> {
  * auth user or sign anyone in — the invite-acceptance page does that with
  * the existing `signUp()` client flow, which is the only place that can
  * collect a password. This just closes the loop once that succeeds.
+ *
+ * Handles both audiences. A client invite carries an `organizationId` and
+ * lands in that org's portal; a member invite carries none and lands on the
+ * dashboard, which is the org picker. Callers get a ready-made `destination`
+ * rather than a slug, because there isn't always a slug to give.
  */
 export async function acceptInviteAction(
   token: string,
-): Promise<{ organizationSlug: string; personId: string }> {
+): Promise<{ destination: string; personId: string }> {
   const invite = await getInviteByToken(token);
   if (!invite) throw new Error("That invite link isn't valid.");
   if (invite.usedAt) throw new Error("That invite has already been used.");
@@ -861,27 +862,36 @@ export async function acceptInviteAction(
     throw new Error("That invite has expired.");
   }
 
-  const organization = await getOrganization(invite.organizationId);
-  if (!organization) throw new Error("That organization no longer exists.");
+  // Absent `organizationId` means an agency member — nothing to look up, and
+  // the dashboard is where they belong.
+  const organization = invite.organizationId
+    ? await getOrganization(invite.organizationId)
+    : undefined;
+  if (invite.organizationId && !organization) {
+    throw new Error("That organization no longer exists.");
+  }
+
+  const destination = organization ? `/w/${organization.slug}` : "/";
 
   await markInviteUsed(invite.id);
 
   // `after()`, not a plain `await`: this is best-effort side-channel work
   // (see the comment on `sendInviteEmail`) that must never delay routing
-  // the newly-signed-up client into their workspace.
+  // the newly-signed-up person into the workspace.
   if (invite.invitedByPersonId) {
     const invitedByPersonId = invite.invitedByPersonId;
+    const joined = organization?.name ?? (await getWorkspace()).name;
     after(async () => {
       try {
-        const [inviter, client] = await Promise.all([
+        const [inviter, invitee] = await Promise.all([
           getPerson(invitedByPersonId),
           getPerson(invite.personId),
         ]);
-        if (inviter && client) {
+        if (inviter && invitee) {
           await sendEmail({
             to: inviter.email,
-            subject: `${client.name} accepted their invite`,
-            html: `<p><strong>${escapeHtml(client.name)}</strong> accepted their invite to <strong>${escapeHtml(organization.name)}</strong> and can now sign in.</p>`,
+            subject: `${invitee.name} accepted their invite`,
+            html: `<p><strong>${escapeHtml(invitee.name)}</strong> accepted their invite to <strong>${escapeHtml(joined)}</strong> and can now sign in.</p>`,
           });
 
           if (inviter.fcmTokens && inviter.fcmTokens.length > 0) {
@@ -890,7 +900,7 @@ export async function acceptInviteAction(
                 tokens: inviter.fcmTokens,
                 notification: {
                   title: "Invite accepted",
-                  body: `${client.name} joined ${organization.name}.`,
+                  body: `${invitee.name} joined ${joined}.`,
                 },
               });
             } catch (fcmError) {
@@ -904,7 +914,7 @@ export async function acceptInviteAction(
     });
   }
 
-  return { organizationSlug: organization.slug, personId: invite.personId };
+  return { destination, personId: invite.personId };
 }
 
 export async function registerDeviceTokenAction(token: string): Promise<void> {

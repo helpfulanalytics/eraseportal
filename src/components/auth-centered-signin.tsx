@@ -209,12 +209,10 @@ function FooterLinks() {
       >
         Forgot password?
       </Link>
-      <p className="text-muted-foreground">
-        Don&apos;t have an account?{" "}
-        <Link href="/sign-up" className="text-foreground hover:underline">
-          Sign up
-        </Link>
-      </p>
+      {/* No sign-up link: the workspace is invite-only, and `/sign-up` is a
+          redirect back to here. Saying so beats offering a door that isn't
+          there. */}
+      <p className="text-muted-foreground">Invite only</p>
     </motion.div>
   );
 }

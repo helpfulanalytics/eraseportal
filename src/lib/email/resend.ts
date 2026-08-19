@@ -15,6 +15,15 @@ import { Resend } from "resend";
 
 const FROM_ADDRESS = process.env.RESEND_FROM_ADDRESS || "Erase Friction Portal <onboarding@resend.dev>";
 
+/**
+ * Origin for links inside emails. Lives here rather than at each call site
+ * because an email is the one place a relative URL is useless — every
+ * consumer of this module needs the same absolute base, and two copies would
+ * eventually disagree about the fallback.
+ */
+export const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
 let client: Resend | null = null;
 
 function getResend(): Resend {

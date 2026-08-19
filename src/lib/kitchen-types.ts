@@ -23,6 +23,21 @@ export interface Workspace {
   name: string;
 }
 
+/**
+ * The agency-side tier, layered on top of `Person.kind === "member"`.
+ *
+ * - `owner` — one per workspace. Everything an admin can do, plus assigning
+ *   and revoking `owner` itself. Can't be removed by anyone else; the seat
+ *   moves only via `transferOwnershipAction`, which promotes and demotes in
+ *   one write so the workspace is never ownerless.
+ * - `admin` — invites and removes members, creates organizations.
+ * - `member` — works inside organizations and invites clients, but can't
+ *   reach the team page at all.
+ *
+ * Clients have no `MemberRole` — `kind` is still the outer discriminator.
+ */
+export type MemberRole = "owner" | "admin" | "member";
+
 export interface Person {
   id: string;
   name: string;
@@ -35,6 +50,23 @@ export interface Person {
   /** Set during onboarding (client invite) or absent — falls back to initials. */
   avatarUrl?: string;
   kind: "member" | "client";
+  /**
+   * The agency tier — only meaningful when `kind` is `"member"`. Absent on
+   * everyone who predates tiers, which is why nothing reads this field
+   * directly: go through `memberRoleOf()` in `permissions.ts`, which defaults
+   * absence to `"admin"` so an existing member keeps exactly the reach they
+   * had before this existed.
+   */
+  memberRole?: MemberRole;
+  /**
+   * ISO timestamp of removal from the workspace. Set instead of deleting the
+   * document, because `authorId` on every message, folder, task and card
+   * points here — a hard delete would turn a workspace's history into
+   * unresolvable ids. `getCurrentUser` refuses anyone carrying this, so a
+   * deactivated person can't sign in, while their name still renders on the
+   * work they did.
+   */
+  deactivatedAt?: string;
   /**
    * Firebase Auth uid, once this person has signed in at least once. Absent
    * for people who exist in the workspace but have never authenticated —
@@ -70,6 +102,22 @@ export interface Person {
 export type FolderAccess = "private" | "clients" | "internal";
 
 export type Role = "viewer" | "editor" | "full";
+
+/**
+ * Per-resource grants, keyed by `Person.id`.
+ *
+ * **The distinction between the three roles is stored, not enforced.** The
+ * read path asks only whether a key is *present* — see `filterByFolderAccess`
+ * in `kitchen-data.ts` and `requireFolderAccess` in `access-guard.ts`, both of
+ * which treat any non-null role as access — and editability is decided by
+ * `kind === "member"`, not by this. So a `viewer` today can do everything an
+ * `editor` can. Same caveat as `FolderAccess` above.
+ *
+ * What *is* enforced is who may write this map: `requireResourceManage` in
+ * `access-guard.ts` gates both share actions. Granting a role is a real
+ * privilege even while the three tiers read alike, because presence alone
+ * opens the folder.
+ */
 export type ResourceRoles = Record<string, Role>;
 
 export interface Folder {
@@ -422,16 +470,27 @@ export interface Organization {
 }
 
 /**
- * A tokenized invite for a client to set a password and claim their
- * pre-seeded `Person` record. `personId` and `organizationId` are denormalised
- * off the `Person` at creation time so accepting an invite doesn't need a
- * second read.
+ * A tokenized invite to set a password and claim a pre-seeded `Person`
+ * record. `personId` and `organizationId` are denormalised off the `Person`
+ * at creation time so accepting an invite doesn't need a second read.
+ *
+ * Covers both audiences. `organizationId` is the discriminator: present for a
+ * client invite (they join one tenant), absent for an agency member invite
+ * (they belong to the workspace, not to an org). Anything reading an invite
+ * has to branch on that rather than assume a tenant — see
+ * `acceptInviteAction`, which turns it into the post-signup destination.
  */
 export interface Invite {
   id: string;
   token: string;
   personId: string;
-  organizationId: string;
+  /** Absent on a member invite — see the note above. */
+  organizationId?: string;
+  /**
+   * The tier a member invitee lands on. Absent means this is a client invite;
+   * paired with `organizationId` above, exactly one of the two is set.
+   */
+  memberRole?: MemberRole;
   email: string;
   createdAt: string;
   expiresAt: string;

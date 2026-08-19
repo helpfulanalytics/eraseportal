@@ -32,6 +32,16 @@ export const WORKSPACE: Workspace = {
   name: "Kea Marketing LLC",
 };
 
+/**
+ * The seeded directory.
+ *
+ * Now that the workspace is invite-only — `getCurrentUser` no longer
+ * provisions a Person for anyone who authenticates — this is the bootstrap.
+ * Exactly one seeded member carries `memberRole: "owner"`, and everyone else
+ * in the workspace descends from an invite that owner (or an admin they
+ * appointed) sent. Without an owner here there is no way to reach `/team`,
+ * and therefore no way to invite anybody.
+ */
 export const PEOPLE: Record<string, Person> = {
   tosin: {
     id: "tosin",
@@ -41,6 +51,7 @@ export const PEOPLE: Record<string, Person> = {
     initials: "AO",
     color: "var(--k-purple)",
     kind: "member",
+    memberRole: "owner",
   },
   brooks: {
     id: "brooks",
@@ -50,6 +61,7 @@ export const PEOPLE: Record<string, Person> = {
     initials: "BC",
     color: "var(--k-green-0e)",
     kind: "member",
+    memberRole: "admin",
   },
   chelsea: {
     id: "chelsea",

@@ -4,6 +4,7 @@
  */
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/kitchen-data";
+import { getSessionUser } from "@/lib/firebase/session";
 import { safeNext } from "@/lib/navigation";
 
 /**
@@ -26,8 +27,15 @@ export async function requireGuest(next?: string): Promise<string> {
 /**
  * The mirror image, for pages that need a session but sit outside the
  * workspace layout that normally enforces one — onboarding, currently.
+ *
+ * Splits the two failure modes the way `(workspace)/layout.tsx` does: since
+ * `getCurrentUser` stopped auto-provisioning, `null` covers both "signed out"
+ * and "authenticated but not in the workspace", and only the first is fixed
+ * by showing a sign-in form.
  */
 export async function requireSession(): Promise<void> {
   const user = await getCurrentUser();
-  if (!user) redirect("/sign-in");
+  if (user) return;
+  if (await getSessionUser()) redirect("/no-access");
+  redirect("/sign-in");
 }

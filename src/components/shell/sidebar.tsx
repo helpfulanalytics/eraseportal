@@ -300,7 +300,7 @@ function CollapsibleFolder({
               {folder.clients.map((client) => (
                 <li key={`client:${client.id}`}>
                   <SidebarRow
-                    href={`/w/${orgSlug}/settings?tab=members`}
+                    href={`/w/${orgSlug}/settings?tab=clients`}
                     active={false}
                     className="pl-8"
                   >

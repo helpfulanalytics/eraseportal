@@ -10,11 +10,19 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { UserMenu } from "@/components/shell/user-menu";
+import { useCurrentUser } from "@/components/workspace-provider";
+import { canManageTeam } from "@/lib/permissions";
 
 export function MinimalShell({ children }: { children: React.ReactNode }) {
+  const currentUser = useCurrentUser();
+  // Team is agency-wide, so it belongs on the unscoped chrome rather than in
+  // an org's sidebar. Hidden for anyone `requireTeamPage` would bounce —
+  // a link that only ever redirects is worse than no link.
+  const showTeam = currentUser ? canManageTeam(currentUser) : false;
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-k-page">
-      <header className="flex h-[var(--k-topbar-height)] shrink-0 items-center px-4">
+      <header className="flex h-[var(--k-topbar-height)] shrink-0 items-center gap-1 px-4">
         <Link
           href="/"
           className="flex size-8 items-center justify-center rounded-full text-k-black-84 transition-colors hover:bg-k-black-04"
@@ -22,6 +30,14 @@ export function MinimalShell({ children }: { children: React.ReactNode }) {
         >
           <BrandMark size={24} />
         </Link>
+        {showTeam ? (
+          <Link
+            href="/team"
+            className="flex h-8 items-center rounded-lg px-2.5 text-k-black-56 text-md transition-colors hover:bg-k-black-04 hover:text-k-black-84"
+          >
+            Team
+          </Link>
+        ) : null}
         <div className="ml-auto">
           <UserMenu />
         </div>

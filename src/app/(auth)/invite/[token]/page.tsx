@@ -1,12 +1,23 @@
 import { InviteAcceptForm } from "@/components/invite-accept-form";
 import { requireGuest } from "@/lib/auth-guard";
-import { getInviteByToken, getOrganization, getPerson, isInviteExpired } from "@/lib/kitchen-data";
+import {
+  getInviteByToken,
+  getOrganization,
+  getPerson,
+  getWorkspace,
+  isInviteExpired,
+} from "@/lib/kitchen-data";
 
 /**
  * Public — reached from the invite email, never linked from inside the app.
  * `requireGuest` bounces an already-signed-in visitor away, same as
- * sign-up/sign-in; accepting someone else's invite while signed in as
- * another account isn't a supported flow.
+ * sign-in; accepting someone else's invite while signed in as another
+ * account isn't a supported flow.
+ *
+ * With self-serve sign-up retired, this is the only route into the workspace
+ * for a new account, for clients and agency members alike. The invite's
+ * `organizationId` tells the two apart: present means a client joining that
+ * org, absent means a member joining the workspace itself.
  */
 export default async function InvitePage({
   params,
@@ -33,13 +44,27 @@ export default async function InvitePage({
     );
   }
 
-  const [person, organization] = await Promise.all([
+  const audience = invite.organizationId ? "client" : "member";
+
+  // A member invite names no organization, so the workspace itself is what
+  // they're joining — that's the name the form should show.
+  const [person, destination] = await Promise.all([
     getPerson(invite.personId),
-    getOrganization(invite.organizationId),
+    invite.organizationId
+      ? getOrganization(invite.organizationId)
+      : getWorkspace(),
   ]);
 
-  if (!person || !organization) {
+  if (!person || !destination) {
     return <InviteMessage title="This invite link isn't valid." />;
+  }
+  if (person.deactivatedAt) {
+    return (
+      <InviteMessage
+        title="This invite is no longer active."
+        body="That account has been removed from the workspace."
+      />
+    );
   }
 
   return (
@@ -47,7 +72,8 @@ export default async function InvitePage({
       token={token}
       name={person.name}
       email={person.email}
-      organizationName={organization.name}
+      destinationName={destination.name}
+      audience={audience}
     />
   );
 }

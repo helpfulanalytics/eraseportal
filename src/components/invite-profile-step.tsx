@@ -43,11 +43,17 @@ function initialsFrom(name: string): string {
 
 export function ProfileStep({
   personId,
-  organizationSlug,
+  destination,
   initialName,
 }: {
   personId: string;
-  organizationSlug: string;
+  /**
+   * Where to land once the profile is saved — `/w/{slug}` for a client, `/`
+   * for an agency member, who has no single org to drop into. Handed over
+   * ready-made by `acceptInviteAction`, since only it knows which kind of
+   * invite this was.
+   */
+  destination: string;
   initialName: string;
 }) {
   const [name, setName] = useState(initialName);
@@ -84,7 +90,7 @@ export function ProfileStep({
         name: name.trim() || undefined,
         avatarUrl: avatarUrl ?? undefined,
       });
-      window.location.replace(`/w/${organizationSlug}`);
+      window.location.replace(destination);
     } catch {
       setError("Couldn't save that. Try again.");
       setPending(false);

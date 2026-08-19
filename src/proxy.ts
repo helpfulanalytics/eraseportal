@@ -26,13 +26,22 @@ import { SESSION_COOKIE } from "@/lib/firebase/session";
 /** Path header consumed by `(workspace)/layout.tsx`. */
 export const PATHNAME_HEADER = "x-pathname";
 
-/** Routes that render without a session. Everything else needs one. */
+/**
+ * Routes that render without a session. Everything else needs one.
+ *
+ * `/no-access` is here despite only ever being reached *with* a session: it's
+ * where an authenticated account that has no workspace identity lands, and
+ * that identity is exactly what this file can't see. Leaving it out would be
+ * harmless today (the cookie is present, so the check passes) but would break
+ * the page the moment it's reached after a sign-out.
+ */
 const PUBLIC_PREFIXES = [
   "/sign-in",
   "/sign-up",
   "/reset-password",
   "/onboarding",
   "/invite",
+  "/no-access",
 ];
 
 function isPublic(pathname: string): boolean {

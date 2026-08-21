@@ -85,10 +85,15 @@ import type {
   Reaction,
 } from "@/lib/kitchen-types";
 import { adminMessaging } from "@/lib/firebase/admin";
-import { SITE_URL, sendEmail } from "@/lib/email/resend";
-import { sendInviteEmail } from "@/lib/email/invite";
+import { SITE_URL } from "@/lib/email/resend";
+import {
+  sendInviteAcceptedEmail,
+  sendInviteEmail,
+  sendNewMessageEmail,
+  sendTaskAssignedEmail,
+  sendTaskCompletedEmail,
+} from "@/lib/email/templates";
 import { canManageOrganizations } from "@/lib/permissions";
-import { escapeHtml } from "@/lib/kitchen-format";
 
 /** Every mutation needs an identity; none of them accept one as input. */
 async function requireUser() {
@@ -248,14 +253,17 @@ export async function sendMessageAction(
         try {
           const recipient = await getPerson(id);
           if (!recipient) return;
-          await sendEmail({
+          await sendNewMessageEmail({
             to: recipient.email,
-            subject: `${me.name} sent a message in ${conversation.name}`,
-            html: `
-              <p>${escapeHtml(me.name)} wrote in <strong>${escapeHtml(conversation.name)}</strong>:</p>
-              <p>${escapeHtml(trimmed)}</p>
-              <p><a href="${conversationUrl}">Open it</a></p>
-            `,
+            authorName: me.name,
+            conversationId: conversation.id,
+            conversationName: conversation.name,
+            body: trimmed,
+            attachmentCount: files.length,
+            folderName: folder?.name,
+            organizationName: organization?.name,
+            orgSlug: organization?.slug,
+            conversationUrl,
           });
 
           // Desktop Notification
@@ -490,6 +498,38 @@ async function folderOf(kind: StarrableKind, id: string): Promise<string> {
   return owner.folderId;
 }
 
+/**
+ * Folder, client and task-list links for a task's notification emails.
+ *
+ * A task's `folderId` is optional and `/w/…` is keyed by slug rather than id,
+ * so either lookup can come back empty. Both URLs fall back to the site root
+ * instead of building a `/w/undefined/tasks` that 404s, and the template drops
+ * whichever rows have no value — see `facts()` in `lib/email/templates.ts`.
+ */
+async function taskEmailContext(folderId?: string): Promise<{
+  folderName?: string;
+  organizationName?: string;
+  orgSlug?: string;
+  /** Every task in the client's workspace. */
+  tasksUrl: string;
+  /** Just the recipient's own — where an assignee actually wants to land. */
+  myTasksUrl: string;
+}> {
+  const folder = folderId ? await getFolder(folderId) : undefined;
+  const organization = folder?.organizationId
+    ? await getOrganization(folder.organizationId)
+    : undefined;
+  const base = organization ? `${SITE_URL}/w/${organization.slug}/tasks` : SITE_URL;
+
+  return {
+    folderName: folder?.name,
+    organizationName: organization?.name,
+    orgSlug: organization?.slug,
+    tasksUrl: base,
+    myTasksUrl: organization ? `${base}/me` : SITE_URL,
+  };
+}
+
 export async function toggleTaskAction(
   taskId: string,
   completed: boolean,
@@ -503,10 +543,16 @@ export async function toggleTaskAction(
       if (task?.authorId && task.authorId !== me.id) {
         const author = await getPerson(task.authorId);
         if (author) {
-          await sendEmail({
+          const where = await taskEmailContext(task.folderId);
+          await sendTaskCompletedEmail({
             to: author.email,
-            subject: `"${task.title}" was completed`,
-            html: `<p>${escapeHtml(me.name)} marked <strong>${escapeHtml(task.title)}</strong> as done.</p>`,
+            completerName: me.name,
+            taskId: task.id,
+            taskTitle: task.title,
+            folderName: where.folderName,
+            organizationName: where.organizationName,
+            orgSlug: where.orgSlug,
+            tasksUrl: where.tasksUrl,
           });
 
           // Desktop Notification
@@ -553,10 +599,17 @@ export async function createTaskAction(input: {
     try {
       const assignee = await getPerson(input.assigneeId);
       if (assignee) {
-        await sendEmail({
+        const where = await taskEmailContext(input.folderId);
+        await sendTaskAssignedEmail({
           to: assignee.email,
-          subject: `${me.name} assigned you a task`,
-          html: `<p>${escapeHtml(me.name)} assigned you <strong>${escapeHtml(title)}</strong>.</p>`,
+          assignerName: me.name,
+          taskId: task.id,
+          taskTitle: title,
+          dueDate: input.dueDate,
+          folderName: where.folderName,
+          organizationName: where.organizationName,
+          orgSlug: where.orgSlug,
+          tasksUrl: where.myTasksUrl,
         });
 
         // Desktop Notification
@@ -807,6 +860,7 @@ export async function createClientAction(
     destinationName: organization?.name ?? "your workspace",
     token: invite.token,
     audience: "client",
+    invitedByName: me.name,
   });
 
   revalidatePath("/w/[orgSlug]", "layout");
@@ -838,6 +892,7 @@ export async function resendInviteAction(personId: string): Promise<void> {
     destinationName: organization?.name ?? "your workspace",
     token: invite.token,
     audience: "client",
+    invitedByName: me.name,
   });
 }
 
@@ -888,10 +943,15 @@ export async function acceptInviteAction(
           getPerson(invite.personId),
         ]);
         if (inviter && invitee) {
-          await sendEmail({
+          await sendInviteAcceptedEmail({
             to: inviter.email,
-            subject: `${invitee.name} accepted their invite`,
-            html: `<p><strong>${escapeHtml(invitee.name)}</strong> accepted their invite to <strong>${escapeHtml(joined)}</strong> and can now sign in.</p>`,
+            inviterName: inviter.name,
+            inviteeName: invitee.name,
+            inviteeEmail: invitee.email,
+            joinedName: joined,
+            destinationUrl: organization
+              ? `${SITE_URL}/w/${organization.slug}`
+              : `${SITE_URL}/team`,
           });
 
           if (inviter.fcmTokens && inviter.fcmTokens.length > 0) {

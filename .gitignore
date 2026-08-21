@@ -48,3 +48,6 @@ firebase-debug.log*
 
 # local firestore backups from `npm run reset`
 backups/
+
+# Output of `npm run email:preview` — a rendering, not a source file.
+email-preview.html

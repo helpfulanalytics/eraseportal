@@ -14,8 +14,7 @@ import {
   getPeople,
 } from "@/lib/kitchen-data";
 import { adminMessaging } from "@/lib/firebase/admin";
-import { sendEmail } from "@/lib/email/resend";
-import { escapeHtml } from "@/lib/kitchen-format";
+import { sendFileUploadedEmail } from "@/lib/email/templates";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
@@ -48,7 +47,12 @@ export async function registerUpload(input: {
   // down the moment the response is sent, before an un-awaited promise's
   // work (the email/push fan-out below) gets a chance to run.
   after(() =>
-    notifyMembersOfUpload({ folderId: input.folderId, fileName: input.name, uploader: me }).catch(
+    notifyMembersOfUpload({
+      folderId: input.folderId,
+      fileName: input.name,
+      bytes: input.bytes,
+      uploader: me,
+    }).catch(
       (cause) => console.error("Couldn't send upload notification:", cause),
     ),
   );
@@ -66,6 +70,8 @@ export async function registerUpload(input: {
 async function notifyMembersOfUpload(input: {
   folderId: string;
   fileName: string;
+  /** Threaded through from `registerUpload` so the email can state the size. */
+  bytes: number;
   uploader: { id: string; name: string };
 }): Promise<void> {
   const folder = await getFolder(input.folderId);
@@ -85,18 +91,17 @@ async function notifyMembersOfUpload(input: {
 
   await Promise.all(
     recipients.map(async (recipient) => {
-      try {
-        await sendEmail({
-          to: recipient.email,
-          subject: `${input.uploader.name} uploaded a file to ${folder.name}`,
-          html: `
-            <p>${escapeHtml(input.uploader.name)} added <strong>${escapeHtml(input.fileName)}</strong> to <strong>${escapeHtml(folder.name)}</strong>.</p>
-            <p><a href="${folderUrl}">Open the folder</a></p>
-          `,
-        });
-      } catch (cause) {
-        console.error("Couldn't send upload email:", cause);
-      }
+      await sendFileUploadedEmail({
+        to: recipient.email,
+        uploaderName: input.uploader.name,
+        fileName: input.fileName,
+        bytes: input.bytes,
+        folderId: folder.id,
+        folderName: folder.name,
+        organizationName: organization?.name,
+        orgSlug: organization?.slug,
+        folderUrl,
+      });
 
       if (recipient.fcmTokens && recipient.fcmTokens.length > 0) {
         try {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import { DesktopOnlyOverlay } from "@/components/desktop-only-overlay";
+import { Agentation } from "agentation";
 import "./globals.css";
 
 const geistMono = Geist_Mono({
@@ -70,6 +71,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <DesktopOnlyOverlay />
         {children}
+        {process.env.NODE_ENV === "development" ? <Agentation /> : null}
       </body>
     </html>
   );

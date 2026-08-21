@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BIMI mark for erasefriction.com.
+
+  This is NOT the same file as src/app/icon.svg, and the differences are
+  required rather than stylistic. BIMI accepts only SVG Tiny 1.2 Portable/
+  Secure: version and baseProfile must be declared, a <title> is mandatory,
+  the viewBox must be square, and scripts, links, external references,
+  animation, filters and embedded rasters are all forbidden. The background is
+  painted rather than left transparent because mailbox providers composite the
+  mark onto an avatar circle of unknown colour.
+
+  See docs/email.md for the DNS record and the VMC that Gmail additionally
+  requires before it will show this in place of the grey initial.
+-->
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Erase Friction</title>
+  <rect width="512" height="512" fill="#1a1a1a"/>
+  <g fill="#ffffff" transform="translate(128 128) scale(1)">
+    <path d="M 116 0 C 51.935 0 0 51.935 0 116 L 116 116 Z"/>
+    <path d="M 140 0 C 204.065 0 256 51.935 256 116 L 140 116 Z"/>
+    <path d="M 116 256 C 51.935 256 0 204.065 0 140 L 116 140 Z"/>
+    <path d="M 140 256 L 256 256 L 256 140 L 140 140 Z"/>
+  </g>
+</svg>

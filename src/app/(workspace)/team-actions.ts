@@ -17,7 +17,7 @@
  */
 import { revalidatePath } from "next/cache";
 import { adminAuth } from "@/lib/firebase/admin";
-import { sendInviteEmail } from "@/lib/email/invite";
+import { sendInviteEmail } from "@/lib/email/templates";
 import {
   createInvite,
   createMember,
@@ -142,6 +142,7 @@ export async function inviteMemberAction(
     destinationName: workspace.name,
     token: invite.token,
     audience: "member",
+    invitedByName: me.name,
   });
 
   revalidatePath("/team");
@@ -172,6 +173,7 @@ export async function resendMemberInviteAction(personId: string): Promise<void> 
     destinationName: workspace.name,
     token: invite.token,
     audience: "member",
+    invitedByName: me.name,
   });
 }
 

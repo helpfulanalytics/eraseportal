@@ -15,6 +15,7 @@ import {
 } from "@/lib/kitchen-data";
 import { adminMessaging } from "@/lib/firebase/admin";
 import { sendFileUploadedEmail } from "@/lib/email/templates";
+import { sendFileUploadedWhatsapp } from "@/lib/whatsapp/templates";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
@@ -116,6 +117,20 @@ async function notifyMembersOfUpload(input: {
         } catch (fcmError) {
           console.error("Couldn't send push notification:", fcmError);
         }
+      }
+
+      if (recipient.phone) {
+        await sendFileUploadedWhatsapp({
+          to: recipient.phone,
+          uploaderName: input.uploader.name,
+          fileName: input.fileName,
+          bytes: input.bytes,
+          folderId: folder.id,
+          folderName: folder.name,
+          organizationName: organization?.name,
+          orgSlug: organization?.slug,
+          folderUrl,
+        });
       }
     }),
   );

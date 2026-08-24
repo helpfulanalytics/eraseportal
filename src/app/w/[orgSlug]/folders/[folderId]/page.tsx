@@ -252,12 +252,26 @@ export default async function FolderPage({ params }: PageProps) {
           toolbarRight={
             <>
               {isAdmin ? (
-                <CreateMenu
-                  folderId={folderId}
-                  orgSlug={orgSlug}
-                  organizations={organizations}
-                  triggerClassName="h-8 gap-1.5 rounded-lg bg-k-black-06 px-3 text-k-black-84 hover:bg-k-black-08"
-                />
+                <>
+                  {/* Conversations are the most common thing started from a
+                      folder, so admins get a one-click shortcut alongside
+                      the full Create menu instead of having to open it and
+                      pick "Conversation" from seven rows every time. */}
+                  <CreateMenu
+                    folderId={folderId}
+                    initial="conversation"
+                    triggerClassName="flex h-8 items-center gap-1.5 rounded-lg bg-k-black-06 px-3 text-k-black-84 hover:bg-k-black-08"
+                  >
+                    <MessageSquareIcon className="size-3.5" strokeWidth={1.8} />
+                    New conversation
+                  </CreateMenu>
+                  <CreateMenu
+                    folderId={folderId}
+                    orgSlug={orgSlug}
+                    organizations={organizations}
+                    triggerClassName="h-8 gap-1.5 rounded-lg bg-k-black-06 px-3 text-k-black-84 hover:bg-k-black-08"
+                  />
+                </>
               ) : (
                 // Clients can only start conversations here — everything else
                 // this menu offers (board/document/embed/folder) is admin-only.

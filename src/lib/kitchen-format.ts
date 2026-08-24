@@ -148,6 +148,24 @@ export function blockPreview(
   return "";
 }
 
+/**
+ * The inverse of `sendMessage`'s paragraph split: flattens a whole body back
+ * to the plain text an edit's textarea should be prefilled with — mentions
+ * back to `@handle`, links back to their href, one blank line between
+ * paragraphs so re-sending it round-trips through `parseInline` unchanged.
+ */
+export function blocksToText(body: Block[], handles?: Record<string, string>): string {
+  return body
+    .map((block) => {
+      if (block.b === "p") return inlineText(block.children, handles);
+      if (block.b === "ul") {
+        return block.items.map((item) => inlineText(item.children, handles)).join("\n");
+      }
+      return block.v;
+    })
+    .join("\n\n");
+}
+
 function inlineText(nodes: Inline[], handles?: Record<string, string>): string {
   return nodes
     .map((node) => {

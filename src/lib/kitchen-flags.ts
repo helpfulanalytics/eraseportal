@@ -10,7 +10,7 @@ export const FLAGS = {
   /** Share dialog beyond Copy Link (access toggle, invite list, Done). */
   shareDialog: false,
   /** Per-message React / Reply / More hover actions. */
-  messageActions: false,
+  messageActions: true,
 } as const;
 
 export type FlagName = keyof typeof FLAGS;

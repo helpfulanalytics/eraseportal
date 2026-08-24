@@ -11,7 +11,6 @@ import {
   UserIcon,
   FileIcon,
 } from "lucide-react";
-import { createPortal } from "react-dom";
 import { useEffect, useState, useTransition, useRef } from "react";
 import { useWorkspace, useOrgSlug } from "@/components/workspace-provider";
 import { isEnabled } from "@/lib/kitchen-flags";
@@ -44,7 +43,13 @@ function getIcon(type: string) {
 }
 
 /**
- * The search pill in the top bar plus its ⌘K overlay.
+ * The search pill in the top bar.
+ *
+ * Expands in place rather than opening a modal: the pill becomes the input
+ * and results drop down directly beneath it, anchored inside this component's
+ * own `relative` wrapper. No backdrop, no portal, no `fixed inset-0` overlay —
+ * the rest of the page stays visible and interactive, which is what "opening
+ * a new modal search box" was doing wrong.
  */
 export function GlobalSearch() {
   const [open, setOpen] = useState(false);
@@ -58,6 +63,7 @@ export function GlobalSearch() {
   const [isPending, startTransition] = useTransition();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -72,13 +78,32 @@ export function GlobalSearch() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [enabled]);
 
+  // Click anywhere outside the pill closes it — the same dismissal a modal's
+  // backdrop gave for free, without needing a backdrop to get it.
   useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setResults([]);
-      setSelectedIndex(0);
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
     }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    // Focus lands after the input mounts, not before.
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [open]);
+
+  /** Clears the query only on the open→close edge, not on every render while closed. */
+  function close() {
+    setOpen(false);
+    setQuery("");
+    setResults([]);
+    setSelectedIndex(0);
+  }
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -101,7 +126,7 @@ export function GlobalSearch() {
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
-      setOpen(false);
+      close();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelectedIndex((prev) => (prev < results.length - 1 ? prev + 1 : prev));
@@ -112,119 +137,100 @@ export function GlobalSearch() {
       e.preventDefault();
       if (results[selectedIndex]?.url) {
         router.push(results[selectedIndex].url);
-        setOpen(false);
+        close();
       }
     }
   }
 
-// ... existing code ...
-
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex h-8 w-[420px] items-center gap-2 rounded-lg border border-k-black-08 bg-background px-3 text-k-gray-ad text-md transition-colors hover:border-k-black-12"
+    <div ref={containerRef} className="relative">
+      <div
+        className={`flex h-8 w-[420px] items-center gap-2 rounded-lg border bg-background px-3 text-md transition-colors ${
+          open ? "border-k-black-16" : "border-k-black-08 hover:border-k-black-12"
+        }`}
       >
-        <SearchIcon className="size-3.5 shrink-0" strokeWidth={1.7} />
-        <span className="truncate">{placeholder}</span>
-      </button>
+        <SearchIcon
+          className="size-3.5 shrink-0 text-k-gray-ad"
+          strokeWidth={1.7}
+        />
+        <input
+          ref={inputRef}
+          value={query}
+          placeholder={placeholder}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={handleKeyDown}
+          className="h-full flex-1 truncate bg-transparent text-k-black outline-none placeholder:text-k-gray-ad"
+        />
+        {isPending && (
+          <div className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-k-black-12 border-t-k-black-40" />
+        )}
+      </div>
 
-      {open && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-50 flex items-start justify-center bg-k-black-24 pt-[12vh]"
-              onClick={() => setOpen(false)}
-              role="presentation"
-            >
-              {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop click-through guard */}
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-label="Search"
-                className="w-[600px] max-w-[calc(100vw-32px)] overflow-hidden rounded-3xl bg-background border border-k-black-08 flex flex-col max-h-[80vh]"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex h-12 items-center gap-2 pr-3 pl-4 shrink-0 border-b border-k-black-06">
-                  <SearchIcon
-                    className="size-5 shrink-0 text-k-gray-ad"
-                    strokeWidth={1.7}
-                  />
-                  {/* biome-ignore lint/a11y/noAutofocus: expected for a command palette */}
-                  <input
-                    ref={inputRef}
-                    autoFocus
-                    placeholder={placeholder}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="h-full flex-1 bg-transparent text-[18px] text-k-black outline-none placeholder:text-k-gray-ad"
-                  />
-                  {isPending && (
-                    <div className="size-4 rounded-full border-2 border-k-black-12 border-t-k-black-40 animate-spin shrink-0" />
-                  )}
-                </div>
-
-                <div className="overflow-y-auto">
-                  {results.length > 0 ? (
-                    <ul className="py-2">
-                      {results.map((result, i) => {
-                        const isSelected = i === selectedIndex;
-                        return (
-                          <li key={result.id} className="px-2">
-                            <button
-                              type="button"
-                              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
-                                isSelected ? "bg-k-black-04" : "hover:bg-k-black-02"
-                              }`}
-                              onClick={() => {
-                                if (result.url) {
-                                  router.push(result.url);
-                                  setOpen(false);
-                                }
-                              }}
-                              onMouseEnter={() => setSelectedIndex(i)}
-                            >
-                              <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-k-black-02">
-                                {getIcon(result.type)}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-k-black text-md font-medium">
-                                  {result.title}
-                                </div>
-                                {result.subtitle && (
-                                  <div className="truncate text-k-black-40 text-sm">
-                                    {result.subtitle}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="text-k-black-40 text-sm capitalize">
-                                {result.type}
-                              </div>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : query.trim().length > 0 && !isPending ? (
-                    <div className="px-4 py-8 text-center text-k-black-40 text-md">
-                      No results found for "{query}"
-                    </div>
-                  ) : query.trim().length === 0 ? (
-                    <div className="px-4 py-8 text-center text-k-black-40 text-md">
-                      Start typing to search.
-                    </div>
-                  ) : (
-                    <div className="px-4 py-8 text-center text-k-black-40 text-md">
-                      Searching...
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-    </>
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Search results"
+          className="absolute top-[calc(100%+6px)] left-0 z-50 max-h-[70vh] w-[420px] overflow-hidden overflow-y-auto rounded-xl border border-k-black-08 bg-background shadow-lg"
+        >
+          {results.length > 0 ? (
+            <ul className="py-2">
+              {results.map((result, i) => {
+                const isSelected = i === selectedIndex;
+                return (
+                  <li key={result.id} className="px-2">
+                    <button
+                      type="button"
+                      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+                        isSelected ? "bg-k-black-04" : "hover:bg-k-black-02"
+                      }`}
+                      onClick={() => {
+                        if (result.url) {
+                          router.push(result.url);
+                          close();
+                        }
+                      }}
+                      onMouseEnter={() => setSelectedIndex(i)}
+                    >
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-k-black-02">
+                        {getIcon(result.type)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-k-black text-md font-medium">
+                          {result.title}
+                        </div>
+                        {result.subtitle && (
+                          <div className="truncate text-k-black-40 text-sm">
+                            {result.subtitle}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-k-black-40 text-sm capitalize">
+                        {result.type}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : query.trim().length > 0 && !isPending ? (
+            <div className="px-4 py-8 text-center text-k-black-40 text-md">
+              No results found for &ldquo;{query}&rdquo;
+            </div>
+          ) : query.trim().length === 0 ? (
+            <div className="px-4 py-8 text-center text-k-black-40 text-md">
+              Start typing to search.
+            </div>
+          ) : (
+            <div className="px-4 py-8 text-center text-k-black-40 text-md">
+              Searching...
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

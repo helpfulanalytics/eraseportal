@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import {
   addBoardColumn,
+  addCardAttachment,
   addCardComment,
   addDeviceToken,
   createBoard,
@@ -34,6 +35,8 @@ import {
   deleteEmbed,
   deleteFolder,
   deleteFolderFile,
+  deleteMessage,
+  editMessage,
   getBoard,
   getConversation,
   getCurrentUser,
@@ -45,17 +48,21 @@ import {
   getInviteByToken,
   getOrganization,
   isInviteExpired,
+  getPeople,
   getPerson,
   getTasks,
   getWorkspace,
   markInviteUsed,
   moveCard,
+  removeCardAttachment,
   removeDeviceToken,
   renameBoard,
   renameBoardColumn,
   renameConversation,
   renameDocument,
+  renameEmbed,
   renameFolder,
+  renameFolderFile,
   renameOrganization,
   saveDocumentContent,
   saveDocumentNodes,
@@ -63,6 +70,7 @@ import {
   setFolderColor,
   setFolderCoverUrl,
   setFolderDescription,
+  setOrganizationDefaultClientAccess,
   setBoardColor,
   setPersonProfile,
   setStarred,
@@ -78,9 +86,11 @@ import { sanitizeCanvasNodes } from "@/lib/canvas";
 import { documentKind, sanitizeDocBlocks } from "@/lib/doc-blocks";
 import type {
   Attachment,
+  ClientAccessLevel,
   DocumentKind,
   FolderAccess,
   ItemKind,
+  Message,
   Person,
   Reaction,
 } from "@/lib/kitchen-types";
@@ -93,6 +103,13 @@ import {
   sendTaskAssignedEmail,
   sendTaskCompletedEmail,
 } from "@/lib/email/templates";
+import {
+  sendInviteAcceptedWhatsapp,
+  sendInviteWhatsapp,
+  sendNewMessageWhatsapp,
+  sendTaskAssignedWhatsapp,
+  sendTaskCompletedWhatsapp,
+} from "@/lib/whatsapp/templates";
 import { canManageOrganizations } from "@/lib/permissions";
 
 /** Every mutation needs an identity; none of them accept one as input. */
@@ -213,6 +230,7 @@ export async function sendMessageAction(
   text: string,
   isNote: boolean,
   attachments: Attachment[] = [],
+  replyToMessageId?: string,
 ): Promise<void> {
   const me = await requireUser();
 
@@ -226,6 +244,26 @@ export async function sendMessageAction(
   // is not.
   if (!trimmed && files.length === 0) return;
 
+  // Only current participants are mentionable — scoping the handle map to
+  // them (rather than the whole org) is what keeps `@someone-not-here` as
+  // literal text instead of a real mention.
+  const people = await getPeople();
+  const handleToId = Object.fromEntries(
+    conversation.participantIds
+      .map((id) => people[id])
+      .filter((person): person is NonNullable<typeof person> => Boolean(person))
+      .map((person) => [person.handle, person.id]),
+  );
+
+  // A reply target has to be a real message in *this* conversation — dropped
+  // silently rather than throwing, since a stale reference (the original was
+  // deleted mid-compose) shouldn't block sending the reply itself.
+  let replyTo: string | undefined;
+  if (replyToMessageId) {
+    const target = await getMessage(replyToMessageId);
+    if (target?.conversationId === conversationId) replyTo = replyToMessageId;
+  }
+
   await sendMessage({
     conversationId,
     folderId: conversation.folderId,
@@ -233,6 +271,8 @@ export async function sendMessageAction(
     text: trimmed,
     isNote,
     attachments: files,
+    handleToId,
+    replyToMessageId: replyTo,
   });
 
   if (!isNote) {
@@ -298,6 +338,21 @@ export async function sendMessageAction(
             } catch (fcmError) {
               console.error("Couldn't send push notification:", fcmError);
             }
+          }
+
+          if (recipient.phone) {
+            await sendNewMessageWhatsapp({
+              to: recipient.phone,
+              authorName: me.name,
+              conversationId: conversation.id,
+              conversationName: conversation.name,
+              body: trimmed,
+              attachmentCount: files.length,
+              folderName: folder?.name,
+              organizationName: organization?.name,
+              orgSlug: organization?.slug,
+              conversationUrl,
+            });
           }
         } catch (cause) {
           console.error("Couldn't send message notification:", cause);
@@ -377,6 +432,52 @@ export async function toggleReactionAction(
   return toggleReaction({ messageId, emoji: trimmed, personId: me.id });
 }
 
+/** Author or admin only — same "author or admin" split as delete below. */
+async function requireMessageEditor(messageId: string) {
+  const me = await requireUser();
+
+  const message = await getMessage(messageId);
+  if (!message) throw new Error("That message no longer exists.");
+
+  const conversation = await getConversation(message.conversationId);
+  if (!conversation) throw new Error("That conversation doesn't exist.");
+  await assertOrgAccess(me, conversation.folderId);
+
+  if (message.authorId !== me.id && me.kind !== "member") {
+    throw new Error("You can only edit or delete your own messages.");
+  }
+
+  return { me, message, conversation };
+}
+
+export async function editMessageAction(
+  messageId: string,
+  text: string,
+): Promise<Message> {
+  const { message, conversation } = await requireMessageEditor(messageId);
+
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("A message can't be edited to be empty.");
+
+  const people = await getPeople();
+  const handleToId = Object.fromEntries(
+    conversation.participantIds
+      .map((id) => people[id])
+      .filter((person): person is NonNullable<typeof person> => Boolean(person))
+      .map((person) => [person.handle, person.id]),
+  );
+
+  const edited = await editMessage({ messageId: message.id, text: trimmed, handleToId });
+  revalidatePath("/w/[orgSlug]/conversations/[conversationId]", "page");
+  return edited;
+}
+
+export async function deleteMessageAction(messageId: string): Promise<void> {
+  const { message } = await requireMessageEditor(messageId);
+  await deleteMessage(message.id);
+  revalidatePath("/w/[orgSlug]/conversations/[conversationId]", "page");
+}
+
 export async function setFolderDescriptionAction(
   folderId: string,
   description: string,
@@ -437,6 +538,64 @@ export async function deleteFolderItemAction(
       if (!embed) return;
       await assertOrgAccess(me, embed.folderId);
       await deleteEmbed(id);
+      break;
+    }
+  }
+
+  revalidatePath("/w/[orgSlug]/folders/[folderId]", "page");
+  revalidatePath("/w/[orgSlug]", "layout");
+}
+
+/**
+ * Rename from the folder listing's row menu — the one place all five kinds
+ * are ever renamed side by side, so it's one dispatcher rather than five
+ * separate call sites each re-deriving "does this kind own its name, or does
+ * a `rename*` need to write it in two places?" A file is the one kind with no
+ * collection of its own to also update; see `renameFolderFile`.
+ */
+export async function renameFolderItemAction(
+  kind: ItemKind,
+  id: string,
+  name: string,
+): Promise<void> {
+  const me = await requireAdmin();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("That needs a name.");
+
+  switch (kind) {
+    case "file": {
+      const item = await getFolderItem(id);
+      if (!item) return;
+      await assertOrgAccess(me, item.folderId);
+      await renameFolderFile(id, trimmed);
+      break;
+    }
+    case "conversation": {
+      const conversation = await getConversation(id);
+      if (!conversation) return;
+      await assertOrgAccess(me, conversation.folderId);
+      await renameConversation(id, trimmed);
+      break;
+    }
+    case "board": {
+      const board = await getBoard(id);
+      if (!board) return;
+      await assertOrgAccess(me, board.folderId);
+      await renameBoard(id, trimmed);
+      break;
+    }
+    case "document": {
+      const doc = await getDocument(id);
+      if (!doc) return;
+      await assertOrgAccess(me, doc.folderId);
+      await renameDocument(id, trimmed);
+      break;
+    }
+    case "embed": {
+      const embed = await getEmbed(id);
+      if (!embed) return;
+      await assertOrgAccess(me, embed.folderId);
+      await renameEmbed(id, trimmed);
       break;
     }
   }
@@ -569,6 +728,19 @@ export async function toggleTaskAction(
               console.error("Couldn't send push notification:", fcmError);
             }
           }
+
+          if (author.phone) {
+            await sendTaskCompletedWhatsapp({
+              to: author.phone,
+              completerName: me.name,
+              taskId: task.id,
+              taskTitle: task.title,
+              folderName: where.folderName,
+              organizationName: where.organizationName,
+              orgSlug: where.orgSlug,
+              tasksUrl: where.tasksUrl,
+            });
+          }
         }
       }
     } catch (cause) {
@@ -626,6 +798,20 @@ export async function createTaskAction(input: {
             console.error("Couldn't send push notification:", fcmError);
           }
         }
+
+        if (assignee.phone) {
+          await sendTaskAssignedWhatsapp({
+            to: assignee.phone,
+            assignerName: me.name,
+            taskId: task.id,
+            taskTitle: title,
+            dueDate: input.dueDate,
+            folderName: where.folderName,
+            organizationName: where.organizationName,
+            orgSlug: where.orgSlug,
+            tasksUrl: where.myTasksUrl,
+          });
+        }
       }
     } catch (cause) {
       console.error("Couldn't send task-assigned notification:", cause);
@@ -677,6 +863,21 @@ export async function renameOrganizationAction(
   await renameOrganization(organizationId, trimmed);
   revalidatePath("/w/[orgSlug]", "layout");
   revalidatePath("/");
+}
+
+const CLIENT_ACCESS_LEVELS: ClientAccessLevel[] = ["view", "comment", "edit"];
+
+export async function setOrganizationDefaultClientAccessAction(
+  organizationId: string,
+  level: ClientAccessLevel,
+): Promise<void> {
+  await requireOrgAdmin();
+  if (!CLIENT_ACCESS_LEVELS.includes(level)) {
+    throw new Error("Not a valid access level.");
+  }
+
+  await setOrganizationDefaultClientAccess(organizationId, level);
+  revalidatePath("/w/[orgSlug]/settings", "page");
 }
 
 /* ---- folder contents -------------------------------------------------- */
@@ -894,6 +1095,16 @@ export async function resendInviteAction(personId: string): Promise<void> {
     audience: "client",
     invitedByName: me.name,
   });
+  if (person.phone) {
+    await sendInviteWhatsapp({
+      to: person.phone,
+      personName: person.name,
+      destinationName: organization?.name ?? "your workspace",
+      token: invite.token,
+      audience: "client",
+      invitedByName: me.name,
+    });
+  }
 }
 
 /**
@@ -967,6 +1178,19 @@ export async function acceptInviteAction(
               console.error("Couldn't send push notification:", fcmError);
             }
           }
+
+          if (inviter.phone) {
+            await sendInviteAcceptedWhatsapp({
+              to: inviter.phone,
+              inviterName: inviter.name,
+              inviteeName: invitee.name,
+              inviteeEmail: invitee.email,
+              joinedName: joined,
+              destinationUrl: organization
+                ? `${SITE_URL}/w/${organization.slug}`
+                : `${SITE_URL}/team`,
+            });
+          }
         }
       } catch (cause) {
         console.error("Couldn't send invite-accepted notification:", cause);
@@ -991,7 +1215,7 @@ export async function registerDeviceTokenAction(token: string): Promise<void> {
  */
 export async function updatePersonProfileAction(
   personId: string,
-  input: { name?: string; avatarUrl?: string },
+  input: { name?: string; avatarUrl?: string; phone?: string },
 ): Promise<void> {
   const me = await requireUser();
   if (me.id !== personId && me.kind !== "member") {
@@ -999,9 +1223,11 @@ export async function updatePersonProfileAction(
   }
 
   const trimmedName = input.name?.trim();
+  const trimmedPhone = input.phone?.trim();
   await setPersonProfile(personId, {
     name: trimmedName || undefined,
     avatarUrl: input.avatarUrl,
+    phone: trimmedPhone || undefined,
   });
   revalidatePath("/w/[orgSlug]", "layout");
 }
@@ -1036,6 +1262,7 @@ export async function createCardAction(input: {
   assigneeId?: string;
   dueDate?: string;
   labels?: string[];
+  attachments?: Attachment[];
 }): Promise<void> {
   const me = await requireAdmin();
 
@@ -1047,7 +1274,31 @@ export async function createCardAction(input: {
     title,
     authorId: me.id,
     description: input.description?.trim() || undefined,
+    attachments: sanitizeAttachments(input.attachments ?? []),
   });
+  revalidatePath("/w/[orgSlug]/boards/[boardId]", "page");
+}
+
+export async function addCardAttachmentAction(
+  boardId: string,
+  cardId: string,
+  attachment: Attachment,
+): Promise<void> {
+  await requireAdmin();
+  const [sanitized] = sanitizeAttachments([attachment]);
+  if (!sanitized) throw new Error("That attachment isn't valid.");
+
+  await addCardAttachment({ boardId, cardId, attachment: sanitized });
+  revalidatePath("/w/[orgSlug]/boards/[boardId]", "page");
+}
+
+export async function removeCardAttachmentAction(
+  boardId: string,
+  cardId: string,
+  attachmentId: string,
+): Promise<void> {
+  await requireAdmin();
+  await removeCardAttachment({ boardId, cardId, attachmentId });
   revalidatePath("/w/[orgSlug]/boards/[boardId]", "page");
 }
 

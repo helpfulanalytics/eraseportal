@@ -27,6 +27,7 @@ import type {
   BoardCardComment,
   BoardColumn,
   CanvasNode,
+  ClientAccessLevel,
   Conversation,
   ConversationFile,
   DocBlock,
@@ -864,6 +865,17 @@ export async function renameOrganization(
   await adminDb().collection(COLLECTIONS.organizations).doc(organizationId).update({ name });
 }
 
+/** The Settings page's "Default client access" — see `ClientAccessLevel`. */
+export async function setOrganizationDefaultClientAccess(
+  organizationId: string,
+  level: ClientAccessLevel,
+): Promise<void> {
+  await adminDb()
+    .collection(COLLECTIONS.organizations)
+    .doc(organizationId)
+    .update({ defaultClientAccess: level });
+}
+
 /**
  * Deletes a folder only if it's empty. A folder's contents span five
  * collections (conversations, boards, documents, embeds, files) each with
@@ -932,10 +944,10 @@ export async function setFolderCoverUrl(folderId: string, url: string): Promise<
   await adminDb().collection(COLLECTIONS.folders).doc(folderId).update({ coverUrl: url });
 }
 
-/** Client onboarding's name-confirmation + avatar step. */
+/** Client onboarding's name-confirmation + avatar (+ phone) step. */
 export async function setPersonProfile(
   personId: string,
-  input: { name?: string; avatarUrl?: string },
+  input: { name?: string; avatarUrl?: string; phone?: string },
 ): Promise<void> {
   const updates: Record<string, string> = {};
   if (input.name) {
@@ -943,6 +955,7 @@ export async function setPersonProfile(
     updates.initials = initialsFrom(input.name);
   }
   if (input.avatarUrl) updates.avatarUrl = input.avatarUrl;
+  if (input.phone) updates.phone = input.phone;
   if (Object.keys(updates).length === 0) return;
 
   await adminDb().collection(COLLECTIONS.people).doc(personId).set(updates, { merge: true });
@@ -1066,23 +1079,41 @@ export async function deleteConversation(conversationId: string): Promise<void> 
  * the item for the folder listing and would otherwise drift immediately.
  */
 /**
- * Splits a plain-text paragraph into text and link runs.
+ * Splits a plain-text paragraph into text, link and mention runs.
  *
- * `RichText` has rendered `{ t: "link" }` since the first mock and nothing
- * ever produced one — a URL someone typed arrived as inert text. The pattern
- * stops before trailing punctuation so "see https://example.com." doesn't
- * swallow the full stop into the href.
+ * `RichText` has rendered `{ t: "link" }` and `{ t: "mention" }` since the
+ * first mock and nothing ever produced either — a URL or `@handle` someone
+ * typed arrived as inert text. One combined pass avoids re-scanning text a
+ * URL match already consumed. The URL pattern stops before trailing
+ * punctuation so "see https://example.com." doesn't swallow the full stop
+ * into the href. A `@handle` only becomes a mention when it's a key in
+ * `handleToId` — anything else (a typo, someone outside the conversation)
+ * stays literal text, which is what keeps mentions scoped to participants.
  */
-function autolink(text: string): Inline[] {
-  const pattern = /https?:\/\/[^\s<]+[^\s<.,:;"')\]}]/g;
+function parseInline(text: string, handleToId: Record<string, string>): Inline[] {
+  const pattern = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]}])|(@([a-zA-Z0-9_]+))/g;
   const runs: Inline[] = [];
   let cursor = 0;
 
   for (const match of text.matchAll(pattern)) {
     const start = match.index ?? 0;
-    if (start > cursor) runs.push({ t: "text", v: text.slice(cursor, start) });
-    runs.push({ t: "link", href: match[0] });
-    cursor = start + match[0].length;
+    const [full, url, , handle] = match;
+
+    if (url) {
+      if (start > cursor) runs.push({ t: "text", v: text.slice(cursor, start) });
+      runs.push({ t: "link", href: url });
+      cursor = start + full.length;
+      continue;
+    }
+
+    const personId = handleToId[handle];
+    if (personId) {
+      if (start > cursor) runs.push({ t: "text", v: text.slice(cursor, start) });
+      runs.push({ t: "mention", personId });
+      cursor = start + full.length;
+    }
+    // No match in handleToId: leave the `@handle` text alone and keep
+    // scanning — it'll be swept up by the trailing text slice below.
   }
 
   if (cursor < text.length) runs.push({ t: "text", v: text.slice(cursor) });
@@ -1097,6 +1128,11 @@ export async function sendMessage(input: {
   text: string;
   isNote?: boolean;
   attachments?: Attachment[];
+  /** Handle → personId, scoped to whoever should be mentionable — the
+   * conversation's participants. Omit to skip mention parsing entirely. */
+  handleToId?: Record<string, string>;
+  /** Set when sent from a message's Reply action. */
+  replyToMessageId?: string;
 }): Promise<Message> {
   const db = adminDb();
   const doc = db.collection(COLLECTIONS.messages).doc();
@@ -1105,7 +1141,7 @@ export async function sendMessage(input: {
     .split(/\n{2,}/)
     .map((chunk) => chunk.trim())
     .filter(Boolean)
-    .map((chunk) => ({ b: "p", children: autolink(chunk) }));
+    .map((chunk) => ({ b: "p", children: parseInline(chunk, input.handleToId ?? {}) }));
 
   const message: Message = {
     id: doc.id,
@@ -1115,6 +1151,7 @@ export async function sendMessage(input: {
     body,
     ...(input.isNote ? { isNote: true } : {}),
     ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+    ...(input.replyToMessageId ? { replyToMessageId: input.replyToMessageId } : {}),
   };
 
   const batch = db.batch();
@@ -1181,6 +1218,47 @@ export async function toggleReaction(input: {
 
   await ref.update({ reactions: next });
   return next;
+}
+
+/**
+ * Rewrites a message's body in place and stamps `editedAt`. Re-runs the same
+ * `parseInline` pass `sendMessage` uses, so an edit that adds a `@handle` or
+ * URL turns into a real mention/link exactly like a new message would.
+ */
+export async function editMessage(input: {
+  messageId: string;
+  text: string;
+  handleToId?: Record<string, string>;
+}): Promise<Message> {
+  const ref = adminDb().collection(COLLECTIONS.messages).doc(input.messageId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new Error("That message no longer exists.");
+
+  const body: Block[] = input.text
+    .split(/\n{2,}/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => ({ b: "p", children: parseInline(chunk, input.handleToId ?? {}) }));
+
+  const editedAt = new Date().toISOString();
+  await ref.update({ body, editedAt });
+  return { ...(snapshot.data() as Message), id: snapshot.id, body, editedAt };
+}
+
+/**
+ * Soft-deletes a message — `body` is cleared and `deletedAt` stamped, but the
+ * row (and any reply pointing at it) stays. Attachments and reactions are
+ * cleared too, since the message-list hides both once `deletedAt` is set and
+ * there'd be nothing left referencing them.
+ */
+export async function deleteMessage(messageId: string): Promise<void> {
+  const ref = adminDb().collection(COLLECTIONS.messages).doc(messageId);
+  await ref.update({
+    body: [],
+    deletedAt: new Date().toISOString(),
+    reactions: FieldValue.delete(),
+    attachments: FieldValue.delete(),
+  });
 }
 
 /**
@@ -1504,6 +1582,16 @@ function canvasPreview(nodes: CanvasNode[]): string {
 }
 
 /**
+ * A file has no collection of its own — its `items` doc *is* the whole
+ * record, unlike board/document/conversation, which keep a name copy there
+ * only for the folder listing. So this is a one-doc update, not the
+ * two-write batch every other `rename*` here is.
+ */
+export async function renameFolderFile(itemId: string, name: string): Promise<void> {
+  await adminDb().collection(COLLECTIONS.items).doc(itemId).update({ name });
+}
+
+/**
  * Removes an uploaded file: the item document, its id in the folder's
  * `itemIds`, and the bytes.
  *
@@ -1587,6 +1675,14 @@ export async function getFolderItem(id: string): Promise<FolderItem | undefined>
   return item ? withFileUrl(item) : undefined;
 }
 
+export async function renameEmbed(embedId: string, name: string): Promise<void> {
+  const db = adminDb();
+  const batch = db.batch();
+  batch.update(db.collection(COLLECTIONS.embeds).doc(embedId), { name });
+  batch.update(db.collection(COLLECTIONS.items).doc(embedId), { name });
+  await batch.commit();
+}
+
 export async function deleteEmbed(embedId: string): Promise<void> {
   const embed = await getEmbed(embedId);
   if (!embed) return;
@@ -1665,6 +1761,8 @@ export async function createClient(input: {
   /** Set when the create flow was opened from inside a folder. Cosmetic only
    * (sidebar linkage) — access is governed by `organizationId`. */
   folderId?: string;
+  /** WhatsApp-reachable number, E.164. Optional — see `Person.phone`. */
+  phone?: string;
 }): Promise<Person> {
   const doc = adminDb().collection(COLLECTIONS.people).doc();
 
@@ -1683,6 +1781,7 @@ export async function createClient(input: {
     kind: "client",
     organizationId: input.organizationId,
     ...(input.folderId ? { folderId: input.folderId } : {}),
+    ...(input.phone ? { phone: input.phone } : {}),
   };
 
   await doc.set(withoutId(person));
@@ -1705,6 +1804,8 @@ export async function createMember(input: {
   name: string;
   email: string;
   memberRole: MemberRole;
+  /** WhatsApp-reachable number, E.164. Optional — see `Person.phone`. */
+  phone?: string;
 }): Promise<Person> {
   const doc = adminDb().collection(COLLECTIONS.people).doc();
 
@@ -1717,6 +1818,7 @@ export async function createMember(input: {
     color: tintFor(doc.id),
     kind: "member",
     memberRole: input.memberRole,
+    ...(input.phone ? { phone: input.phone } : {}),
   };
 
   await doc.set(withoutId(person));
@@ -1901,6 +2003,7 @@ export async function createCard(input: {
   assigneeId?: string;
   dueDate?: string;
   labels?: string[];
+  attachments?: Attachment[];
 }): Promise<BoardCard> {
   const card: BoardCard = {
     id: randomUUID(),
@@ -1911,6 +2014,7 @@ export async function createCard(input: {
     ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
     ...(input.dueDate ? { dueDate: input.dueDate } : {}),
     ...(input.labels?.length ? { labels: input.labels } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   };
 
   await mutateBoardColumns(input.boardId, (columns) =>
@@ -1955,10 +2059,64 @@ export async function updateCard(input: {
               ...(c.authorId ? { authorId: c.authorId } : {}),
               ...(c.createdAt ? { createdAt: c.createdAt } : {}),
               ...(c.comments?.length ? { comments: c.comments } : {}),
+              ...(c.attachments?.length ? { attachments: c.attachments } : {}),
               ...(input.description ? { description: input.description } : {}),
               ...(input.assigneeId ? { assigneeId: input.assigneeId } : {}),
               ...(input.dueDate ? { dueDate: input.dueDate } : {}),
               ...(input.labels?.length ? { labels: input.labels } : {}),
+            },
+      ),
+    })),
+  );
+}
+
+/**
+ * Appends an attachment to a card. Its own function rather than a field on
+ * `updateCard`'s form-replace payload — attachments accumulate the way
+ * comments do (there's no form input for "the whole attachment list" to
+ * round-trip through), so this reads-modifies-writes the same shape
+ * `addCardComment` does below.
+ */
+export async function addCardAttachment(input: {
+  boardId: string;
+  cardId: string;
+  attachment: Attachment;
+}): Promise<void> {
+  await mutateBoardColumns(input.boardId, (columns) =>
+    columns.map((col) => ({
+      ...col,
+      cards: col.cards.map((c): BoardCard =>
+        c.id !== input.cardId
+          ? c
+          : { ...c, attachments: [...(c.attachments ?? []), input.attachment] },
+      ),
+    })),
+  );
+}
+
+/**
+ * Detaches an attachment from a card. The Storage object is left alone —
+ * same call this app makes for a folder file versus a conversation
+ * attachment: nothing else references these bytes by URL, so there's no
+ * dangling-reference risk in leaving them, and deleting is one more failure
+ * mode for a click that should just work.
+ */
+export async function removeCardAttachment(input: {
+  boardId: string;
+  cardId: string;
+  attachmentId: string;
+}): Promise<void> {
+  await mutateBoardColumns(input.boardId, (columns) =>
+    columns.map((col) => ({
+      ...col,
+      cards: col.cards.map((c): BoardCard =>
+        c.id !== input.cardId
+          ? c
+          : {
+              ...c,
+              attachments: (c.attachments ?? []).filter(
+                (a) => a.id !== input.attachmentId,
+              ),
             },
       ),
     })),

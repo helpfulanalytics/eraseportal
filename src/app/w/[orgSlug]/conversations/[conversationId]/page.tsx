@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { MessageSquareIcon } from "lucide-react";
 import { notFound } from "next/navigation";
-import { Composer } from "@/components/conversation/composer";
-import { MessageList } from "@/components/conversation/message-list";
+import { ConversationView } from "@/components/conversation/conversation-view";
 import { ConversationHeaderControls } from "@/components/kitchen/conversation-header-controls";
 import { DataTable, type Row } from "@/components/kitchen/data-table";
 import { ItemThumb } from "@/components/kitchen/item-thumb";
@@ -102,12 +101,11 @@ export default async function ConversationPage({
       {showFiles ? (
         <FilesTab conversationId={conversationId} />
       ) : (
-        <>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <MessageList messages={messages} />
-          </div>
-          <Composer conversationId={conversationId} />
-        </>
+        <ConversationView
+          conversationId={conversationId}
+          participantIds={conversation.participantIds}
+          messages={messages}
+        />
       )}
     </div>
   );

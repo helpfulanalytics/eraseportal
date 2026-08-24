@@ -89,6 +89,13 @@ export interface Person {
   folderId?: string;
   /** Push notification tokens for desktop notifications. */
   fcmTokens?: string[];
+  /**
+   * WhatsApp-reachable phone number, E.164 (e.g. `+14155551234`). Absent on
+   * everyone who predates WhatsApp notifications — `sendWhatsApp` call sites
+   * treat absence as "skip this channel", same as they already do for
+   * `fcmTokens`.
+   */
+  phone?: string;
 }
 
 /**
@@ -262,6 +269,16 @@ export interface Message {
   attachments?: Attachment[];
   /** Internal note — visible to the team, not the client. */
   isNote?: boolean;
+  /** Set once the author edits the body after sending. */
+  editedAt?: string;
+  /**
+   * Soft delete — the row stays (reactions, attachments and any replies
+   * pointing at it stay consistent), but `body` is no longer shown; the
+   * message-list renders a "Message deleted" placeholder instead.
+   */
+  deletedAt?: string;
+  /** The message this one is a reply to, if any. */
+  replyToMessageId?: string;
 }
 
 export interface Conversation {
@@ -314,6 +331,8 @@ export interface BoardCard {
   authorId?: string;
   createdAt?: string;
   comments?: BoardCardComment[];
+  /** Files and images, same shape a conversation message attaches. */
+  attachments?: Attachment[];
 }
 
 export interface BoardColumn {
@@ -460,6 +479,18 @@ export interface Embed {
  * `kind: "client"` optionally carries an `organizationId` pointing here;
  * admins (`kind: "member"`) aren't scoped to one and see every org.
  */
+/**
+ * What a newly-invited client can do, before anything is changed per item.
+ *
+ * Deliberately its own type rather than a reuse of `Role` above: `Role`'s
+ * three tiers (viewer/editor/full) are already documented as unenforced
+ * everywhere they're read, and its vocabulary doesn't have a "comment" rung.
+ * This one is unenforced too — nothing reads it yet, same caveat as `Role`
+ * and `FolderAccess` — but it's a distinct setting with its own three values,
+ * not a relabelling of the resource-role ones.
+ */
+export type ClientAccessLevel = "view" | "comment" | "edit";
+
 export interface Organization {
   id: string;
   name: string;
@@ -467,6 +498,8 @@ export interface Organization {
   createdAt: string;
   /** URL path segment for this org's workspace portal — `/w/{slug}`. */
   slug: string;
+  /** Absent on orgs created before this setting existed — treat as `"view"`. */
+  defaultClientAccess?: ClientAccessLevel;
 }
 
 /**

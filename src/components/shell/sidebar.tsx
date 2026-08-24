@@ -2,8 +2,11 @@
 
 import {
   ArchiveIcon,
+  Building2Icon,
+  CheckIcon,
   CircleCheckIcon,
   ChevronRightIcon,
+  ChevronsUpDownIcon,
   ExternalLinkIcon,
   FileTextIcon,
   FolderIcon,
@@ -39,11 +42,17 @@ import { useTransition } from "react";
 
 import { CreateMenu } from "@/components/kitchen/create-menu";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   useCurrentUser,
   useOrgSlug,
   useWorkspace,
 } from "@/components/workspace-provider";
-import type { NavFolder } from "@/lib/kitchen-types";
+import type { NavFolder, Organization } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
 function HomeGlyph({ className }: { className?: string }) {
@@ -109,7 +118,14 @@ function iconFor(item: NavItem) {
   }
 }
 
-export function Sidebar({ folders }: { folders: NavFolder[] }) {
+export function Sidebar({
+  folders,
+  organizations,
+}: {
+  folders: NavFolder[];
+  /** Every org, for the switcher below. Empty for a client, who only ever has the one. */
+  organizations: Organization[];
+}) {
   const pathname = usePathname();
   const workspace = useWorkspace();
   const currentUser = useCurrentUser();
@@ -125,9 +141,13 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
   return (
     <div className="flex h-full w-sidebar shrink-0 flex-col overflow-y-auto border-k-black-06 border-r bg-background">
       <div className="flex items-center gap-1 px-4 pt-4 pb-3">
-        <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
-          {workspace.name}
-        </h2>
+        {isAdmin && organizations.length > 1 ? (
+          <OrgSwitcher organizations={organizations} currentOrgId={workspace.id} />
+        ) : (
+          <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
+            {workspace.name}
+          </h2>
+        )}
         {/* Clients start conversations from inside a folder (see that
         page's own Create menu) — everything this one offers is admin-only. */}
         {isAdmin ? <CreateMenu folders={folders} /> : null}
@@ -162,6 +182,49 @@ export function Sidebar({ folders }: { folders: NavFolder[] }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * The sidebar header, when there's more than one org to switch between: a
+ * dropdown instead of a plain heading, so getting to another org is one
+ * click here rather than back out to "All organizations" and in again.
+ * Member-only and only rendered when `organizations.length > 1` — see
+ * `Sidebar` above; a client's own org, or a workspace with just the one,
+ * gets the plain heading it always had.
+ */
+function OrgSwitcher({
+  organizations,
+  currentOrgId,
+}: {
+  organizations: Organization[];
+  currentOrgId: string;
+}) {
+  const current = organizations.find((org) => org.id === currentOrgId);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-0.5 pr-1 text-left transition-colors hover:bg-k-black-04">
+        <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
+          {current?.name ?? "Select organization"}
+        </h2>
+        <ChevronsUpDownIcon
+          className="size-3.5 shrink-0 text-k-black-24"
+          strokeWidth={1.8}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-64">
+        {organizations.map((org) => (
+          <DropdownMenuItem key={org.id} render={<Link href={`/w/${org.slug}`} />}>
+            <Building2Icon className="size-3.5 shrink-0 text-k-black-40" strokeWidth={1.7} />
+            <span className="min-w-0 flex-1 truncate">{org.name}</span>
+            {org.id === currentOrgId ? (
+              <CheckIcon className="size-3.5 shrink-0" strokeWidth={2} />
+            ) : null}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

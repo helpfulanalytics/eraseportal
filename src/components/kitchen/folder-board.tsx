@@ -3,16 +3,18 @@
 /**
  * The client workspace home, restyled after the bagui dashboard-folder
  * reference: folders animate open on hover/select instead of sitting as flat
- * cards, and selecting one opens a right-hand details panel — item list,
- * color, last-activity — with a link into the real folder page for anything
- * beyond a quick look. Unlike that reference, item data is real: the panel
- * fetches `getFolderPanelItems` for the selected folder rather than carrying
- * a mock dataset.
+ * cards. Clicking a tile navigates straight into that folder — the primary
+ * action stays one click, not a click-to-preview-then-click-to-enter detour.
+ * A small eye icon on each tile is the secondary path: it opens a right-hand
+ * details panel (item list, color, last-activity) for a quick peek without
+ * leaving the dashboard. The panel fetches `getFolderPanelItems` for the
+ * previewed folder rather than carrying a mock dataset.
  */
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import {
   ArrowRightIcon,
+  EyeIcon,
   FolderIcon,
   FolderOpenIcon,
   SearchIcon,
@@ -136,8 +138,9 @@ export function FolderBoard({
               <FolderTile
                 key={item.id}
                 item={item}
+                href={item.href}
                 selected={item.id === selectedId}
-                onSelect={() => setSelectedId((cur) => (cur === item.id ? null : item.id))}
+                onPreview={() => setSelectedId((cur) => (cur === item.id ? null : item.id))}
               />
             ))}
           </div>
@@ -159,26 +162,31 @@ export function FolderBoard({
 }
 
 /**
- * A folder tile with the hover/select "open" animation. Two shapes: a button
- * that toggles the dashboard's right panel (`onSelect`, used by `FolderBoard`
- * itself), or a plain navigating link (`href`, used by `SubfolderGrid` — a
- * folder inside a folder page has nowhere useful to preview into, it just
- * goes there).
+ * A folder tile with the hover/select "open" animation. Clicking the tile
+ * always navigates (`href`) — that's the one-click primary action. When
+ * `onPreview` is also passed (the main `FolderBoard` grid), a small eye
+ * icon layered on top of the tile opens the dashboard's side panel for a
+ * quick peek instead, without leaving the page. It's a DOM sibling of the
+ * link rather than nested inside it, so both stay independently clickable
+ * and keyboard-focusable. `SubfolderGrid` passes only `href` — a folder
+ * inside a folder page has nowhere useful to preview into, it just goes
+ * there.
  */
 export function FolderTile({
   item,
   selected = false,
-  onSelect,
+  onPreview,
   href,
 }: {
   item: FolderBoardItem;
   selected?: boolean;
-  onSelect?: () => void;
+  onPreview?: () => void;
   href?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const open = hovered || selected;
   const tint = item.color ?? "var(--k-black-24)";
+  const hasPreview = Boolean(onPreview);
 
   const className = cn(
     "flex w-full flex-col gap-3 rounded-xl border bg-background p-5 text-left transition-colors",
@@ -225,7 +233,7 @@ export function FolderTile({
               )}
             </AnimatePresence>
           </motion.span>
-          <div className="min-w-0 flex-1">
+          <div className={cn("min-w-0 flex-1", hasPreview && "pr-7")}>
             <h3 className="truncate font-medium text-k-black-84 text-md">{item.title}</h3>
             {item.subtitle ? (
               <p className="mt-0.5 truncate text-k-black-40 text-sm">{item.subtitle}</p>
@@ -247,16 +255,37 @@ export function FolderTile({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 340, damping: 32 }}
+      className="relative"
     >
       {href ? (
         <Link href={href} className={className} {...handlers}>
           {body}
         </Link>
       ) : (
-        <button type="button" onClick={onSelect} className={className} {...handlers}>
+        <button type="button" onClick={onPreview} className={className} {...handlers}>
           {body}
         </button>
       )}
+      {hasPreview ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onPreview?.();
+          }}
+          aria-label={selected ? `Close ${item.title} preview` : `Preview ${item.title}`}
+          aria-pressed={selected}
+          className={cn(
+            "absolute top-3 right-3 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+            selected
+              ? "bg-k-blue text-k-white"
+              : "text-k-black-36 hover:bg-k-black-08 hover:text-k-black-84",
+          )}
+        >
+          <EyeIcon className="size-3.5" strokeWidth={1.8} />
+        </button>
+      ) : null}
     </motion.div>
   );
 }

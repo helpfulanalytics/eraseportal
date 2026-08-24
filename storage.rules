@@ -48,6 +48,16 @@ service firebase.storage {
       allow update: if false;
     }
 
+    // Files attached to a board card. One wildcard segment, same as
+    // conversations — the card a file belongs to lives in Firestore, not
+    // the object path, so removing an attachment never needs to move bytes.
+    match /boards/{boardId}/{fileId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && withinSizeLimit() && safeContentType();
+      allow delete: if signedIn();
+      allow update: if false;
+    }
+
     // A person's avatar, set during client onboarding.
     match /people/{personId}/{fileId} {
       allow read: if signedIn();

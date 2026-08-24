@@ -2,11 +2,13 @@ import { redirect } from "next/navigation";
 import { PageTitleTabs, SubTabs } from "@/components/kitchen/page-title";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { OrgNameField } from "@/components/kitchen/org-name-field";
+import { DefaultClientAccessField } from "@/components/kitchen/default-client-access-field";
 import { PortalLinkField } from "@/components/kitchen/portal-link-field";
 import { NewOrgClientButton } from "@/components/kitchen/admin-dialog-buttons";
 import { ResendInviteButton } from "@/components/kitchen/resend-invite-button";
 import { requireOrgWorkspaceAccess } from "@/lib/access-guard";
 import { getClients } from "@/lib/kitchen-data";
+import type { ClientAccessLevel } from "@/lib/kitchen-types";
 
 const TABS = ["general", "clients", "billing"] as const;
 type Tab = (typeof TABS)[number];
@@ -61,7 +63,12 @@ export default async function SettingsPage({
 
       <div className="mt-8 max-w-[640px]">
         {active === "general" ? (
-          <General organizationId={organization.id} name={organization.name} orgSlug={orgSlug} />
+          <General
+            organizationId={organization.id}
+            name={organization.name}
+            orgSlug={orgSlug}
+            defaultClientAccess={organization.defaultClientAccess ?? "view"}
+          />
         ) : null}
         {active === "clients" ? <Clients organizationId={organization.id} /> : null}
         {active === "billing" ? <Billing /> : null}
@@ -74,10 +81,12 @@ function General({
   organizationId,
   name,
   orgSlug,
+  defaultClientAccess,
 }: {
   organizationId: string;
   name: string;
   orgSlug: string;
+  defaultClientAccess: ClientAccessLevel;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -93,11 +102,10 @@ function General({
         label="Default client access"
         hint="What invited clients can do unless changed per item."
       >
-        <select className="h-8 w-full rounded-lg border border-k-black-08 bg-background px-2.5 text-k-black-84 text-md outline-none focus:border-k-blue">
-          <option>Can view</option>
-          <option>Can comment</option>
-          <option>Can edit</option>
-        </select>
+        <DefaultClientAccessField
+          organizationId={organizationId}
+          initial={defaultClientAccess}
+        />
       </Field>
     </div>
   );

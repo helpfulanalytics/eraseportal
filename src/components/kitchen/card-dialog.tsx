@@ -3,8 +3,15 @@
 /**
  * Create/detail dialog for a board card — Trello's card modal, scaled to
  * what this data model actually holds: title, description, one assignee, a
- * due date, labels, and comments. There are no attachments here because
- * there's no data behind them; this doesn't pretend otherwise.
+ * due date, labels, comments, and attachments.
+ *
+ * Attachments follow the comments shape, not the form-field shape: they
+ * accumulate rather than round-trip through `updateCard`'s full replace, so
+ * adding one on an existing card is immediate (upload, then
+ * `addCardAttachmentAction`) the same way posting a comment is. Only the
+ * create-mode list is form state, because a brand-new card has no id yet for
+ * `addCardAttachmentAction` to target — those uploads stage locally and go up
+ * with the rest of the form on Save.
  *
  * Two different interaction models, not one form used two ways:
  *
@@ -36,16 +43,21 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   CalendarIcon,
+  DownloadIcon,
   MessageSquareIcon,
+  PaperclipIcon,
   TagIcon,
   TrashIcon,
   UserIcon,
+  XIcon,
 } from "lucide-react";
 import {
+  addCardAttachmentAction,
   addCardCommentAction,
   createCardAction,
   deleteCardAction,
   moveCardAction,
+  removeCardAttachmentAction,
   updateCardAction,
 } from "@/app/(workspace)/actions";
 import {
@@ -55,9 +67,36 @@ import {
 } from "@/components/kitchen/dialog-shell";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { useCurrentUser, usePeople, usePerson } from "@/components/workspace-provider";
-import { formatDateTime, formatShortDate } from "@/lib/kitchen-format";
-import type { BoardCard, BoardCardComment, BoardColumn } from "@/lib/kitchen-types";
+import { uploadFile } from "@/lib/firebase/storage";
+import {
+  blockedUploadReason,
+  formatBytes,
+  formatDateTime,
+  formatShortDate,
+} from "@/lib/kitchen-format";
+import type {
+  Attachment,
+  BoardCard,
+  BoardCardComment,
+  BoardColumn,
+} from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
+
+/** A pending attachment: uploaded to Storage, not yet attached to a card. */
+interface AttachmentDraft extends Attachment {
+  /** 0–1 while the bytes are still going up; absent once it's landed. */
+  progress?: number;
+}
+
+/** "report.pdf" → "PDF"; falls back to a mime-based guess for extensionless names. */
+function labelForFile(name: string, mime: string): string {
+  if (mime.startsWith("audio/")) return "Audio";
+  if (mime.startsWith("video/")) return "Video";
+  const extension = name.includes(".") ? name.split(".").pop() : "";
+  if (extension) return extension.toUpperCase();
+  if (mime.startsWith("image/")) return "Image";
+  return "File";
+}
 
 const LABEL_OPTIONS = ["blocker", "security", "milestone", "launch"] as const;
 const LABEL_TINT: Record<string, string> = {
@@ -94,6 +133,13 @@ export function CardDialog({
   const [assigneeId, setAssigneeId] = useState(card?.assigneeId ?? "");
   const [dueDate, setDueDate] = useState(card?.dueDate ?? "");
   const [labels, setLabels] = useState<string[]>(card?.labels ?? []);
+  // Create-mode staging only — see the file header. An existing card's
+  // attachments live in `attachments` state further down, next to the
+  // comments panel it mirrors.
+  const [attachmentDrafts, setAttachmentDrafts] = useState<AttachmentDraft[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const attachmentUploading = attachmentDrafts.some((d) => d.progress !== undefined);
+  const attachFileRef = useRef<HTMLInputElement>(null);
 
   // Existing-card-only interaction state. A new card has none of this — it's
   // a single form.
@@ -113,12 +159,75 @@ export function CardDialog({
   const [deleting, startDelete] = useTransition();
   const titleRef = useRef<HTMLInputElement>(null);
   const titleEditRef = useRef<HTMLInputElement>(null);
+  // Detail-mode only — an existing card's own attachment list, updated
+  // optimistically the same way `CommentsPanel` handles its comments.
+  const [attachments, setAttachments] = useState<Attachment[]>(card?.attachments ?? []);
+  const [cardAttachmentError, setCardAttachmentError] = useState<string | null>(null);
+  const cardAttachFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (card ? titleEditRef : titleRef).current?.focus();
   }, [card]);
 
   const busy = pending || moving || deleting;
+
+  /**
+   * Uploads to Storage and stages a draft chip — create mode only. The
+   * finished `Attachment`s go up with the rest of the form on Save; nothing
+   * here writes to the card, because there's no card yet to write to.
+   */
+  const stageAttachments = async (files: File[]) => {
+    setAttachmentError(null);
+
+    for (const file of files) {
+      const reason = blockedUploadReason(file);
+      if (reason) {
+        setAttachmentError(reason);
+        continue;
+      }
+
+      const id = crypto.randomUUID();
+      setAttachmentDrafts((current) => [
+        ...current,
+        {
+          id,
+          name: file.name,
+          label: labelForFile(file.name, file.type),
+          bytes: file.size,
+          mime: file.type || undefined,
+          progress: 0,
+        },
+      ]);
+
+      try {
+        const result = await uploadFile(`boards/${boardId}`, file, (fraction) => {
+          setAttachmentDrafts((current) =>
+            current.map((d) => (d.id === id ? { ...d, progress: fraction } : d)),
+          );
+        });
+        setAttachmentDrafts((current) =>
+          current.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  bytes: result.bytes,
+                  mime: result.mime,
+                  url: result.downloadUrl,
+                  progress: undefined,
+                }
+              : d,
+          ),
+        );
+      } catch (cause) {
+        setAttachmentDrafts((current) => current.filter((d) => d.id !== id));
+        setAttachmentError(
+          cause instanceof Error && cause.name === "NotSignedInError"
+            ? cause.message
+            : `Couldn't upload ${file.name}.`,
+        );
+      }
+    }
+  };
 
   /**
    * Writes one or more fields for an existing card, merging them onto the
@@ -216,6 +325,12 @@ export function CardDialog({
           assigneeId: assigneeId || undefined,
           dueDate: dueDate || undefined,
           labels: labels.length ? labels : undefined,
+          attachments: attachmentDrafts
+            .filter((d) => d.progress === undefined)
+            .map(({ progress, ...rest }) => {
+              void progress;
+              return rest;
+            }),
         });
         onClose();
       } catch (cause) {
@@ -248,6 +363,57 @@ export function CardDialog({
     });
   };
 
+  /**
+   * Detail mode: upload, then attach immediately — no staging, because
+   * there's already a real card to attach to. Optimistic the same way
+   * `CommentsPanel.post` is: the chip appears mid-upload and rolls back if
+   * either the upload or the write fails.
+   */
+  const attachToCard = async (files: File[]) => {
+    if (!card) return;
+    setCardAttachmentError(null);
+
+    for (const file of files) {
+      const reason = blockedUploadReason(file);
+      if (reason) {
+        setCardAttachmentError(reason);
+        continue;
+      }
+
+      const attachmentId = crypto.randomUUID();
+      try {
+        const result = await uploadFile(`boards/${boardId}`, file);
+        const attachment: Attachment = {
+          id: attachmentId,
+          name: file.name,
+          label: labelForFile(file.name, result.mime),
+          bytes: result.bytes,
+          mime: result.mime,
+          url: result.downloadUrl,
+        };
+        setAttachments((current) => [...current, attachment]);
+        await addCardAttachmentAction(boardId, card.id, attachment);
+      } catch (cause) {
+        setAttachments((current) => current.filter((a) => a.id !== attachmentId));
+        setCardAttachmentError(
+          cause instanceof Error && cause.name === "NotSignedInError"
+            ? cause.message
+            : `Couldn't attach ${file.name}.`,
+        );
+      }
+    }
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    if (!card) return;
+    const previous = attachments;
+    setAttachments((current) => current.filter((a) => a.id !== attachmentId));
+    void removeCardAttachmentAction(boardId, card.id, attachmentId).catch(() => {
+      setAttachments(previous);
+      setCardAttachmentError("Couldn't remove that attachment.");
+    });
+  };
+
   if (!card) {
     // Create mode: unchanged single-column form.
     return (
@@ -256,11 +422,21 @@ export function CardDialog({
         size="lg"
         onClose={onClose}
         onSubmit={createSave}
-        canSubmit={Boolean(title.trim())}
+        canSubmit={Boolean(title.trim()) && !attachmentUploading}
         pending={pending}
-        error={error}
+        error={error ?? attachmentError}
       >
         <div className="flex flex-col gap-5 px-6 pb-2">
+          <input
+            ref={attachFileRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) void stageAttachments(Array.from(e.target.files));
+              e.target.value = "";
+            }}
+          />
           <div>
             <FieldLabel>Title</FieldLabel>
             <input
@@ -354,6 +530,37 @@ export function CardDialog({
               onChange={(e) => setDescription(e.target.value)}
               className={cn(dialogFieldClass, "h-auto resize-none py-2")}
             />
+          </div>
+
+          <div>
+            <FieldLabel optional>Attachments</FieldLabel>
+            <div className="flex flex-col gap-2">
+              {attachmentDrafts.length ? (
+                <ul className="flex flex-wrap gap-2">
+                  {attachmentDrafts.map((draft) => (
+                    <li key={draft.id}>
+                      <AttachmentDraftChip
+                        draft={draft}
+                        onRemove={() =>
+                          setAttachmentDrafts((current) =>
+                            current.filter((d) => d.id !== draft.id),
+                          )
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => attachFileRef.current?.click()}
+                className="flex h-8 w-fit items-center gap-1.5 rounded-lg border border-k-black-12 px-3 text-k-black-56 text-md transition-colors hover:border-k-black-24 hover:text-k-black-84 disabled:opacity-60"
+              >
+                <PaperclipIcon className="size-3.5" strokeWidth={1.7} />
+                Add an image or file
+              </button>
+            </div>
           </div>
         </div>
       </DialogShell>
@@ -655,6 +862,48 @@ export function CardDialog({
               </button>
             )}
           </div>
+
+          <div>
+            <input
+              ref={cardAttachFileRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.length) void attachToCard(Array.from(e.target.files));
+                e.target.value = "";
+              }}
+            />
+            <FieldLabel optional>Attachments</FieldLabel>
+            <div className="flex flex-col gap-2">
+              {attachments.length ? (
+                <ul className="flex flex-col gap-1.5">
+                  {attachments.map((attachment) => (
+                    <AttachmentRow
+                      key={attachment.id}
+                      attachment={attachment}
+                      disabled={busy}
+                      onRemove={() => removeAttachment(attachment.id)}
+                    />
+                  ))}
+                </ul>
+              ) : null}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => cardAttachFileRef.current?.click()}
+                className="flex h-8 w-fit items-center gap-1.5 rounded-lg border border-k-black-12 px-3 text-k-black-56 text-md transition-colors hover:border-k-black-24 hover:text-k-black-84 disabled:opacity-60"
+              >
+                <PaperclipIcon className="size-3.5" strokeWidth={1.7} />
+                Add an image or file
+              </button>
+              {cardAttachmentError ? (
+                <p role="alert" className="text-k-red text-sm">
+                  {cardAttachmentError}
+                </p>
+              ) : null}
+            </div>
+          </div>
         </div>
 
         <div className="flex min-w-0 flex-[2] flex-col border-k-black-06 border-l pl-6">
@@ -825,6 +1074,101 @@ function CommentRow({ comment }: { comment: BoardCardComment }) {
           {formatDateTime(comment.createdAt)}
         </p>
       </div>
+    </li>
+  );
+}
+
+/** Create-mode staged attachment — matches `Composer`'s `DraftChip`. */
+function AttachmentDraftChip({
+  draft,
+  onRemove,
+}: {
+  draft: AttachmentDraft;
+  onRemove: () => void;
+}) {
+  const busy = draft.progress !== undefined;
+
+  return (
+    <span className="flex items-center gap-2 rounded-lg border border-k-black-08 bg-background py-1 pr-1 pl-2.5">
+      <span className="min-w-0">
+        <span className="block max-w-[180px] truncate text-k-black-84 text-sm">
+          {draft.name}
+        </span>
+        <span className="block text-k-black-40 text-xs">
+          {busy
+            ? `Uploading ${Math.round((draft.progress ?? 0) * 100)}%`
+            : draft.bytes > 0
+              ? `${draft.label} • ${formatBytes(draft.bytes)}`
+              : draft.label}
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${draft.name}`}
+        className="flex size-6 shrink-0 items-center justify-center rounded-md text-k-black-40 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
+      >
+        <XIcon className="size-3.5" strokeWidth={1.8} />
+      </button>
+    </span>
+  );
+}
+
+/**
+ * An existing card's attachment — a real link when Storage gave it a URL,
+ * a chip you can only read otherwise. Same caveat `Attachment.url`'s own
+ * doc comment carries: seeded fixtures have no bytes behind them.
+ */
+function AttachmentRow({
+  attachment,
+  disabled,
+  onRemove,
+}: {
+  attachment: Attachment;
+  disabled: boolean;
+  onRemove: () => void;
+}) {
+  const meta = attachment.bytes > 0
+    ? `${attachment.label} • ${formatBytes(attachment.bytes)}`
+    : attachment.label;
+
+  return (
+    <li className="flex items-center gap-2 rounded-lg border border-k-black-08 bg-background py-1.5 pr-1.5 pl-2.5">
+      {attachment.url ? (
+        <a
+          href={attachment.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex min-w-0 flex-1 items-center gap-2 hover:underline"
+        >
+          <DownloadIcon className="size-3.5 shrink-0 text-k-black-40" strokeWidth={1.7} />
+          <span className="min-w-0">
+            <span className="block truncate text-k-black-84 text-sm">
+              {attachment.name}
+            </span>
+            <span className="block text-k-black-40 text-xs">{meta}</span>
+          </span>
+        </a>
+      ) : (
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <PaperclipIcon className="size-3.5 shrink-0 text-k-black-40" strokeWidth={1.7} />
+          <span className="min-w-0">
+            <span className="block truncate text-k-black-84 text-sm">
+              {attachment.name}
+            </span>
+            <span className="block text-k-black-40 text-xs">{meta}</span>
+          </span>
+        </span>
+      )}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onRemove}
+        aria-label={`Remove ${attachment.name}`}
+        className="flex size-6 shrink-0 items-center justify-center rounded-md text-k-black-40 transition-colors hover:bg-k-black-04 hover:text-k-black-84 disabled:opacity-60"
+      >
+        <XIcon className="size-3.5" strokeWidth={1.8} />
+      </button>
     </li>
   );
 }

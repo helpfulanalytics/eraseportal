@@ -7,7 +7,7 @@ import { InboxSidebar } from "@/components/shell/inbox-sidebar";
 import { Sidebar } from "@/components/shell/sidebar";
 import { UserMenu } from "@/components/shell/user-menu";
 import { useOrgSlug } from "@/components/workspace-provider";
-import type { NavFolder } from "@/lib/kitchen-types";
+import type { NavFolder, Organization } from "@/lib/kitchen-types";
 
 const SIDEBAR_KEY = "workspace:sidebar-open";
 const INBOX_KEY = "workspace:inbox-open";
@@ -72,9 +72,12 @@ const inboxStore = makeFlagStore(INBOX_KEY, false);
 export function AppShell({
   children,
   navFolders,
+  organizations,
 }: {
   children: React.ReactNode;
   navFolders: NavFolder[];
+  /** Every org, for the sidebar's switcher. Empty for a client — see the org layout. */
+  organizations: Organization[];
 }) {
   const orgSlug = useOrgSlug();
   const sidebarOpen = useSyncExternalStore(
@@ -122,7 +125,9 @@ export function AppShell({
         ) : null}
 
         <div className="mr-[var(--k-card-inset)] flex min-w-0 flex-1 overflow-hidden rounded-2xl bg-background shadow-[0_0_0_0.5px_var(--k-black-08)]">
-          {showFolders ? <Sidebar folders={navFolders} /> : null}
+          {showFolders ? (
+            <Sidebar folders={navFolders} organizations={organizations} />
+          ) : null}
           <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>

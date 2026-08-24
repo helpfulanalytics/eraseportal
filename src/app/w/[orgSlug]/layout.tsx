@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { WorkspaceProvider } from "@/components/workspace-provider";
 import { requireOrgWorkspaceAccess } from "@/lib/access-guard";
-import { getNavTree, getPeople } from "@/lib/kitchen-data";
+import { getNavTree, getOrganizations, getPeople } from "@/lib/kitchen-data";
 
 /**
  * The gate and data root for one organization's workspace — every folder,
@@ -25,9 +25,14 @@ export default async function OrgWorkspaceLayout({
   const { orgSlug } = await params;
   const { organization, me } = await requireOrgWorkspaceAccess(orgSlug);
 
-  const [people, navFolders] = await Promise.all([
+  // A client only ever has the one org, so the switcher — and the list it'd
+  // need — is member-only; skipping the fetch for a client isn't an
+  // optimisation worth the extra branch, it's just not fetching data nobody
+  // can use, same as `/w/[orgSlug]/page.tsx` already does for "All organizations".
+  const [people, navFolders, organizations] = await Promise.all([
     getPeople(),
     getNavTree({ organizationId: organization.id }),
+    me.kind === "member" ? getOrganizations() : Promise.resolve([]),
   ]);
 
   return (
@@ -37,7 +42,9 @@ export default async function OrgWorkspaceLayout({
       currentUser={me}
       orgSlug={orgSlug}
     >
-      <AppShell navFolders={navFolders}>{children}</AppShell>
+      <AppShell navFolders={navFolders} organizations={organizations}>
+        {children}
+      </AppShell>
     </WorkspaceProvider>
   );
 }

@@ -26,10 +26,15 @@ import {
   LayoutListIcon,
   LinkIcon,
   MoreHorizontalIcon,
+  PencilIcon,
   SearchIcon,
   XIcon,
 } from "lucide-react";
-import { deleteFolderItemAction, reorderFolderItemsAction } from "@/app/(workspace)/actions";
+import {
+  deleteFolderItemAction,
+  renameFolderItemAction,
+  reorderFolderItemsAction,
+} from "@/app/(workspace)/actions";
 
 import {
   DndContext,
@@ -164,6 +169,8 @@ export function FolderContents({
 
   const [preview, setPreview] = useState<PreviewFile | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** The row currently showing an editable name field instead of static text. */
+  const [renamingId, setRenamingId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   const authors = useMemo(() => {
@@ -190,6 +197,28 @@ export function FolderContents({
   const open = (row: FolderRow) => {
     if (row.file) setPreview(row.file);
     else if (row.href) router.push(row.href);
+  };
+
+  /**
+   * Optimistic: the row's name updates immediately, and only rolls back if
+   * the write fails — matching `handleDragEnd`'s reorder, and the same
+   * reason `renameBoardAction` et al. don't round-trip before showing the
+   * new title on their own pages.
+   */
+  const rename = (row: FolderRow, name: string) => {
+    const trimmed = name.trim();
+    setRenamingId(null);
+    if (!trimmed || trimmed === row.name) return;
+
+    const previous = row.name;
+    setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, name: trimmed } : r)));
+    startTransition(async () => {
+      try {
+        await renameFolderItemAction(row.kind, row.id, trimmed);
+      } catch {
+        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, name: previous } : r)));
+      }
+    });
   };
 
   const remove = (row: FolderRow) => {
@@ -315,8 +344,11 @@ export function FolderContents({
                     busy={busyId === row.id}
                     canManage={canManage}
                     filtered={filtered}
+                    renaming={renamingId === row.id}
                     onOpen={() => open(row)}
                     onDelete={() => remove(row)}
+                    onRename={(name: string) => rename(row, name)}
+                    onStartRename={() => setRenamingId(row.id)}
                   />
                 ))}
               </ul>
@@ -331,8 +363,11 @@ export function FolderContents({
                 row={row}
                 busy={busyId === row.id}
                 canManage={canManage}
+                renaming={renamingId === row.id}
                 onOpen={() => open(row)}
                 onDelete={() => remove(row)}
+                onRename={(name: string) => rename(row, name)}
+                onStartRename={() => setRenamingId(row.id)}
               />
             ))}
           </ul>
@@ -347,6 +382,68 @@ export function FolderContents({
 }
 
 /**
+ * The row's name, swapped for an editable field while renaming.
+ *
+ * Not a `<Link>`/button child while editing — clicking into the input must
+ * not navigate. Enter commits, Escape reverts to `row.name` without writing,
+ * and a blur commits too, so clicking away doesn't strand the row mid-edit.
+ */
+function NameField({
+  row,
+  renaming,
+  onRename,
+  className,
+}: {
+  row: FolderRow;
+  renaming: boolean;
+  onRename: (name: string) => void;
+  className: string;
+}) {
+  // Keyed to `renaming` so the field remounts fresh (and re-syncs to the
+  // current name) each time editing starts, instead of a `useEffect` writing
+  // state on every render where `renaming` flips true.
+  const [value, setValue] = useState(row.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renaming) {
+      // Runs after the input mounts, and selects rather than just focusing —
+      // renaming almost always means replacing the whole name, not editing
+      // a character in the middle of it.
+      requestAnimationFrame(() => inputRef.current?.select());
+    }
+  }, [renaming]);
+
+  if (!renaming) {
+    return <span className={className}>{row.name}</span>;
+  }
+
+  return (
+    <input
+      key={row.name}
+      ref={inputRef}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onRename(value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          onRename(row.name);
+        }
+      }}
+      onBlur={() => onRename(value)}
+      className={cn(
+        className,
+        "w-full rounded-sm bg-k-blue-04 outline-none ring-1 ring-k-blue",
+      )}
+    />
+  );
+}
+
+/**
  * A row that navigates is a real `<Link>` — middle-click, ⌘-click and "copy
  * link address" all have to keep working. A file has nowhere to navigate to,
  * so that one is a button that opens the preview.
@@ -354,13 +451,20 @@ export function FolderContents({
 function RowTarget({
   row,
   onOpen,
+  renaming,
   children,
 }: {
   row: FolderRow;
   onOpen: () => void;
+  /** While true, renders a plain (non-navigating) container — clicking into the name field must not follow the row's link. */
+  renaming?: boolean;
   children: React.ReactNode;
 }) {
   const className = "flex min-w-0 flex-1 items-center gap-3 text-left";
+
+  if (renaming) {
+    return <div className={className}>{children}</div>;
+  }
 
   if (row.href) {
     return (
@@ -381,14 +485,20 @@ function GridCard({
   row,
   busy,
   canManage,
+  renaming,
   onOpen,
   onDelete,
+  onRename,
+  onStartRename,
 }: {
   row: FolderRow;
   busy: boolean;
   canManage: boolean;
+  renaming: boolean;
   onOpen: () => void;
   onDelete: () => void;
+  onRename: (name: string) => void;
+  onStartRename: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const handleContextMenu = (e: React.MouseEvent) => { e.preventDefault(); setMenuOpen(true); };
@@ -397,8 +507,13 @@ function GridCard({
   const body = (
     <>
       <ItemThumb subject={{ ...row, url: row.embedUrl }} size="card" name={row.name} />
-      <span className="mt-2 block w-full truncate text-k-black-84 text-md">
-        {row.name}
+      <span className="mt-2 block w-full">
+        <NameField
+          row={row}
+          renaming={renaming}
+          onRename={onRename}
+          className="block w-full truncate text-k-black-84 text-md"
+        />
       </span>
       <span className="block w-full truncate text-k-black-40 text-sm">
         {row.subtitle}
@@ -422,12 +537,15 @@ function GridCard({
           busy={busy}
           onOpen={onOpen}
           onDelete={onDelete}
+          onStartRename={onStartRename}
           open={menuOpen}
           onOpenChange={setMenuOpen}
         />
       </div>
 
-      {row.href ? (
+      {renaming ? (
+        <div className="flex w-full min-w-0 flex-col">{body}</div>
+      ) : row.href ? (
         <Link href={row.href} className="flex w-full min-w-0 flex-col">
           {body}
         </Link>
@@ -450,6 +568,7 @@ function RowMenu({
   busy,
   onOpen,
   onDelete,
+  onStartRename,
   open,
   onOpenChange,
 }: {
@@ -458,6 +577,7 @@ function RowMenu({
   busy: boolean;
   onOpen: () => void;
   onDelete: () => void;
+  onStartRename: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -523,6 +643,13 @@ function RowMenu({
             </>
           )}
         </DropdownMenuItem>
+
+        {canManage ? (
+          <DropdownMenuItem onClick={onStartRename}>
+            <PencilIcon className="size-3.5" strokeWidth={1.7} />
+            Rename
+          </DropdownMenuItem>
+        ) : null}
 
         {canManage ? (
           <DropdownMenuItem variant="destructive" onClick={onDelete}>
@@ -637,12 +764,15 @@ function SortableRowWrapper(props: any) {
         props.busy && "opacity-50",
       )}
     >
-      <RowTarget row={props.row} onOpen={props.onOpen}>
+      <RowTarget row={props.row} onOpen={props.onOpen} renaming={props.renaming}>
         <ItemThumb subject={{ ...props.row, url: props.row.embedUrl }} name={props.row.name} />
         <span className="min-w-0">
-          <span className="block truncate text-k-black-84 text-md">
-            {props.row.name}
-          </span>
+          <NameField
+            row={props.row}
+            renaming={props.renaming}
+            onRename={props.onRename}
+            className="block truncate text-k-black-84 text-md"
+          />
           <span className="block truncate text-k-black-40 text-md">
             {props.row.subtitle}
           </span>
@@ -660,6 +790,7 @@ function SortableRowWrapper(props: any) {
           busy={props.busy}
           onOpen={props.onOpen}
           onDelete={props.onDelete}
+          onStartRename={props.onStartRename}
           open={menuOpen}
           onOpenChange={setMenuOpen}
         />
@@ -682,12 +813,15 @@ function ListRow(props: any) {
         props.busy && "opacity-50",
       )}
     >
-      <RowTarget row={props.row} onOpen={props.onOpen}>
+      <RowTarget row={props.row} onOpen={props.onOpen} renaming={props.renaming}>
         <ItemThumb subject={{ ...props.row, url: props.row.embedUrl }} name={props.row.name} />
         <span className="min-w-0">
-          <span className="block truncate text-k-black-84 text-md">
-            {props.row.name}
-          </span>
+          <NameField
+            row={props.row}
+            renaming={props.renaming}
+            onRename={props.onRename}
+            className="block truncate text-k-black-84 text-md"
+          />
           <span className="block truncate text-k-black-40 text-md">
             {props.row.subtitle}
           </span>
@@ -705,6 +839,7 @@ function ListRow(props: any) {
           busy={props.busy}
           onOpen={props.onOpen}
           onDelete={props.onDelete}
+          onStartRename={props.onStartRename}
           open={menuOpen}
           onOpenChange={setMenuOpen}
         />

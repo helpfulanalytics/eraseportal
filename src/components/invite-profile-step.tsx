@@ -57,6 +57,7 @@ export function ProfileStep({
   initialName: string;
 }) {
   const [name, setName] = useState(initialName);
+  const [phone, setPhone] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [pending, setPending] = useState(false);
@@ -89,6 +90,7 @@ export function ProfileStep({
       await updatePersonProfileAction(personId, {
         name: name.trim() || undefined,
         avatarUrl: avatarUrl ?? undefined,
+        phone: phone.trim() || undefined,
       });
       window.location.replace(destination);
     } catch {
@@ -158,6 +160,26 @@ export function ProfileStep({
               disabled={pending}
               nativeInput
             />
+          </Field>
+        </motion.div>
+
+        <motion.div variants={itemVariants} className="mt-4">
+          <Field>
+            <FieldLabel htmlFor="profile-phone">
+              Phone <span className="text-muted-foreground font-normal">(optional)</span>
+            </FieldLabel>
+            <Input
+              id="profile-phone"
+              type="tel"
+              placeholder="+1 415 555 1234"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              disabled={pending}
+              nativeInput
+            />
+            <p className="mt-1.5 text-muted-foreground text-xs">
+              Get notifications on WhatsApp too. Include your country code.
+            </p>
           </Field>
         </motion.div>
 

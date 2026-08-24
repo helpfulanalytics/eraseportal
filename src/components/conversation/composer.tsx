@@ -26,24 +26,36 @@
  * and nothing else. Don't rely on it to hide anything from a client account
  * until the read path filters on it.
  */
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   ImageIcon,
   MicIcon,
   MoreHorizontalIcon,
   NotebookPenIcon,
   PaperclipIcon,
+  ReplyIcon,
   SquareIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
 import { sendMessageAction } from "@/app/(workspace)/actions";
 import { GifPicker } from "@/components/conversation/gif-picker";
+import {
+  getCaretCoordinates,
+  MentionDropdown,
+} from "@/components/conversation/mention-dropdown";
+import { usePeople, usePerson } from "@/components/workspace-provider";
 import { uploadFile } from "@/lib/firebase/storage";
-import { blockedUploadReason, formatBytes } from "@/lib/kitchen-format";
+import { blockedUploadReason, blocksToText, formatBytes } from "@/lib/kitchen-format";
 import type { GiphyGif } from "@/lib/giphy";
-import type { Attachment } from "@/lib/kitchen-types";
+import type { Attachment, Message, Person } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
+
+/** Where in the draft an active `@query` starts, and what's typed after it. */
+interface MentionState {
+  start: number;
+  query: string;
+}
 
 /** A pending attachment: uploaded to Storage, not yet sent with a message. */
 interface Draft extends Attachment {
@@ -51,7 +63,20 @@ interface Draft extends Attachment {
   progress?: number;
 }
 
-export function Composer({ conversationId }: { conversationId: string }) {
+export function Composer({
+  conversationId,
+  participantIds,
+  replyTo,
+  onCancelReply,
+}: {
+  conversationId: string;
+  /** Who the @-mention dropdown can offer — see kitchen-data.ts's
+   * `parseInline`, which resolves mentions against this same set. */
+  participantIds: string[];
+  /** Set from a message row's Reply action — shows the dismissible bar. */
+  replyTo?: Message | null;
+  onCancelReply?: () => void;
+}) {
   const [value, setValue] = useState("");
   const [isNote, setIsNote] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -62,9 +87,58 @@ export function Composer({ conversationId }: { conversationId: string }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
 
+  const [mention, setMention] = useState<MentionState | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const pendingCaretRef = useRef<number | null>(null);
+
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+
+  const people = usePeople();
+  const mentionMatches = useMemo<Person[]>(() => {
+    if (!mention) return [];
+    const query = mention.query.toLowerCase();
+    return participantIds
+      .map((id) => people[id])
+      .filter((person): person is Person => Boolean(person))
+      .filter(
+        (person) =>
+          person.name.toLowerCase().includes(query) ||
+          person.handle.toLowerCase().includes(query),
+      );
+  }, [mention, participantIds, people]);
+
+  // Move the caret after a mention insertion once the DOM has the new value
+  // — setSelectionRange against the pre-update value is a no-op.
+  useEffect(() => {
+    if (pendingCaretRef.current === null) return;
+    const pos = pendingCaretRef.current;
+    pendingCaretRef.current = null;
+    textRef.current?.setSelectionRange(pos, pos);
+  }, [value]);
+
+  /** Re-derives the active `@query` (if any) from the caret's position. */
+  const syncMention = (text: string, caret: number) => {
+    const upToCaret = text.slice(0, caret);
+    const match = /(^|\s)(@(\w*))$/.exec(upToCaret);
+    if (!match) {
+      setMention(null);
+      return;
+    }
+    setMention({ start: upToCaret.length - match[2].length, query: match[3] });
+    setMentionIndex(0);
+  };
+
+  const pickMention = (person: Person) => {
+    if (!mention) return;
+    const caret = textRef.current?.selectionStart ?? mention.start;
+    const inserted = `@${person.handle} `;
+    const next = value.slice(0, mention.start) + inserted + value.slice(caret);
+    pendingCaretRef.current = mention.start + inserted.length;
+    setValue(next);
+    setMention(null);
+  };
 
   const uploading = drafts.some((d) => d.progress !== undefined);
   const canSend = (value.trim().length > 0 || drafts.length > 0) && !pending && !uploading;
@@ -180,6 +254,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
   const send = () => {
     if (!canSend) return;
     const text = value;
+    const replyToMessageId = replyTo?.id;
     // The chip's upload progress is UI state, not something a message stores.
     const attachments: Attachment[] = drafts.map((draft) => {
       const { progress, ...rest } = draft;
@@ -192,10 +267,18 @@ export function Composer({ conversationId }: { conversationId: string }) {
     setValue("");
     setDrafts([]);
     setError(null);
+    setMention(null);
+    onCancelReply?.();
 
     startTransition(async () => {
       try {
-        await sendMessageAction(conversationId, text, isNote, attachments);
+        await sendMessageAction(
+          conversationId,
+          text,
+          isNote,
+          attachments,
+          replyToMessageId,
+        );
       } catch {
         setValue(text);
         setDrafts(attachments);
@@ -256,34 +339,82 @@ export function Composer({ conversationId }: { conversationId: string }) {
               : "border-k-black-12 bg-background focus-within:border-k-black-24",
         )}
       >
-        <textarea
-          ref={textRef}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            // Cmd/Ctrl+Enter sends; plain Enter stays a newline, because these
-            // are long-form client messages rather than chat one-liners.
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              send();
+        {replyTo ? (
+          <ReplyBar message={replyTo} onCancel={() => onCancelReply?.()} />
+        ) : null}
+
+        <div className="relative">
+          <textarea
+            ref={textRef}
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              syncMention(e.target.value, e.target.selectionStart);
+            }}
+            onClick={(e) => syncMention(value, e.currentTarget.selectionStart)}
+            onKeyDown={(e) => {
+              if (mention && mentionMatches.length > 0) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setMentionIndex((i) => (i + 1) % mentionMatches.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMentionIndex(
+                    (i) => (i - 1 + mentionMatches.length) % mentionMatches.length,
+                  );
+                  return;
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  pickMention(mentionMatches[mentionIndex]);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setMention(null);
+                  return;
+                }
+              }
+              // Cmd/Ctrl+Enter sends; plain Enter stays a newline, because
+              // these are long-form client messages rather than chat
+              // one-liners.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            onPaste={(e) => {
+              // A screenshot on the clipboard arrives as a file, not as text.
+              const files = Array.from(e.clipboardData.files);
+              if (files.length) {
+                e.preventDefault();
+                void upload(files);
+              }
+            }}
+            rows={2}
+            placeholder={
+              isNote
+                ? "Write an internal note — only your team can see this…"
+                : "Write a message or note, or just drag files here..."
             }
-          }}
-          onPaste={(e) => {
-            // A screenshot on the clipboard arrives as a file, not as text.
-            const files = Array.from(e.clipboardData.files);
-            if (files.length) {
-              e.preventDefault();
-              void upload(files);
-            }
-          }}
-          rows={2}
-          placeholder={
-            isNote
-              ? "Write an internal note — only your team can see this…"
-              : "Write a message or note, or just drag files here..."
-          }
-          className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-k-black-84 text-md outline-none placeholder:text-k-gray-ad"
-        />
+            className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-k-black-84 text-md outline-none placeholder:text-k-gray-ad"
+          />
+
+          {mention && mentionMatches.length > 0 && textRef.current ? (
+            <MentionDropdown
+              people={mentionMatches}
+              activeIndex={mentionIndex}
+              style={(() => {
+                const caret = getCaretCoordinates(textRef.current, mention.start);
+                return { top: caret.top + caret.height + 4, left: caret.left };
+              })()}
+              onPick={pickMention}
+              onClose={() => setMention(null)}
+            />
+          ) : null}
+        </div>
 
         {drafts.length ? (
           <ul className="flex flex-wrap gap-2 px-4 pb-2">
@@ -390,6 +521,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
                   setValue("");
                   setDrafts([]);
                   setError(null);
+                  setMention(null);
                   textRef.current?.focus();
                 }}
               />
@@ -430,6 +562,32 @@ export function Composer({ conversationId }: { conversationId: string }) {
 }
 
 /* ---- pieces ------------------------------------------------------------ */
+
+/** The dismissible "Replying to X" bar shown above the textarea. */
+function ReplyBar({ message, onCancel }: { message: Message; onCancel: () => void }) {
+  const author = usePerson(message.authorId);
+  const people = usePeople();
+  const handles = Object.fromEntries(Object.values(people).map((p) => [p.id, p.handle]));
+  const preview = blocksToText(message.body, handles).replace(/\s+/g, " ").trim();
+
+  return (
+    <div className="flex items-center gap-2 rounded-t-xl border-k-black-08 border-b bg-k-black-02 px-4 py-2">
+      <ReplyIcon className="size-3.5 shrink-0 -scale-x-100 text-k-black-40" strokeWidth={1.8} />
+      <span className="min-w-0 flex-1 truncate text-k-black-56 text-sm">
+        Replying to <span className="font-medium">{author?.name ?? "Someone"}</span>
+        {preview ? ` — ${preview.slice(0, 60)}` : ""}
+      </span>
+      <button
+        type="button"
+        onClick={onCancel}
+        aria-label="Cancel reply"
+        className="flex size-5 shrink-0 items-center justify-center rounded-md text-k-black-40 transition-colors hover:bg-k-black-08 hover:text-k-black-84"
+      >
+        <XIcon className="size-3.5" strokeWidth={1.8} />
+      </button>
+    </div>
+  );
+}
 
 function DraftChip({ draft, onRemove }: { draft: Draft; onRemove: () => void }) {
   const busy = draft.progress !== undefined;

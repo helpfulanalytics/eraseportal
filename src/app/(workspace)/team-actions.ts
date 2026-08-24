@@ -18,6 +18,7 @@
 import { revalidatePath } from "next/cache";
 import { adminAuth } from "@/lib/firebase/admin";
 import { sendInviteEmail } from "@/lib/email/templates";
+import { sendInviteWhatsapp } from "@/lib/whatsapp/templates";
 import {
   createInvite,
   createMember,
@@ -175,6 +176,16 @@ export async function resendMemberInviteAction(personId: string): Promise<void> 
     audience: "member",
     invitedByName: me.name,
   });
+  if (person.phone) {
+    await sendInviteWhatsapp({
+      to: person.phone,
+      personName: person.name,
+      destinationName: workspace.name,
+      token: invite.token,
+      audience: "member",
+      invitedByName: me.name,
+    });
+  }
 }
 
 /* ---- roles and removal ------------------------------------------------ */

@@ -1,13 +1,23 @@
 "use client";
 
-import { MoreHorizontalIcon, ReplyIcon, SmilePlusIcon } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { toggleReactionAction } from "@/app/(workspace)/actions";
+import { MoreHorizontalIcon, ReplyIcon, SmilePlusIcon, XIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  deleteMessageAction,
+  editMessageAction,
+  toggleReactionAction,
+} from "@/app/(workspace)/actions";
 import { RichText } from "@/components/conversation/rich-text";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useCurrentUser, usePeople, usePerson } from "@/components/workspace-provider";
 import { isEnabled } from "@/lib/kitchen-flags";
-import { formatBytes, formatShortDate } from "@/lib/kitchen-format";
+import { blocksToText, formatBytes, formatShortDate } from "@/lib/kitchen-format";
 import type { Attachment, Message, Reaction } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
@@ -49,8 +59,19 @@ function useFocusedMessage() {
   return hash;
 }
 
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({
+  messages,
+  onReply,
+}: {
+  messages: Message[];
+  /** Wired to the composer above — Reply seeds its "Replying to" bar. */
+  onReply?: (message: Message) => void;
+}) {
   const focusedId = useFocusedMessage();
+  const messagesById = useMemo(
+    () => new Map(messages.map((m) => [m.id, m])),
+    [messages],
+  );
 
   return (
     <ol className="flex flex-col gap-5 px-5 py-6">
@@ -59,6 +80,12 @@ export function MessageList({ messages }: { messages: Message[] }) {
           key={message.id}
           message={message}
           focused={message.id === focusedId}
+          parentMessage={
+            message.replyToMessageId
+              ? messagesById.get(message.replyToMessageId)
+              : undefined
+          }
+          onReply={onReply}
         />
       ))}
     </ol>
@@ -68,13 +95,23 @@ export function MessageList({ messages }: { messages: Message[] }) {
 function MessageRow({
   message,
   focused,
+  parentMessage,
+  onReply,
 }: {
   message: Message;
   focused: boolean;
+  parentMessage: Message | undefined;
+  onReply?: (message: Message) => void;
 }) {
   const author = usePerson(message.authorId);
   const currentUser = useCurrentUser();
   const isOwn = message.authorId === currentUser?.id;
+  const canEdit = isOwn || currentUser?.kind === "member";
+  const people = usePeople();
+  const handles = useMemo(
+    () => Object.fromEntries(Object.values(people).map((p) => [p.id, p.handle])),
+    [people],
+  );
 
   // Reactions are held locally so a pill flips the instant it's clicked. The
   // server's answer replaces this — it's authoritative about who else has
@@ -92,6 +129,62 @@ function MessageRow({
     setReactions(message.reactions ?? []);
   }
 
+  // Same shape again for edit/delete: body, editedAt and deletedAt all move
+  // together, so one prop-changed check covers all three.
+  const [body, setBody] = useState(message.body);
+  const [editedAt, setEditedAt] = useState(message.editedAt);
+  const [deletedAt, setDeletedAt] = useState(message.deletedAt);
+  const [serverBody, setServerBody] = useState(message.body);
+  if (message.body !== serverBody) {
+    setServerBody(message.body);
+    setBody(message.body);
+    setEditedAt(message.editedAt);
+    setDeletedAt(message.deletedAt);
+  }
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = () => {
+    setDraft(blocksToText(body, handles));
+    setEditing(true);
+  };
+
+  const saveEdit = () => {
+    const text = draft.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    startTransition(async () => {
+      try {
+        const edited = await editMessageAction(message.id, text);
+        setBody(edited.body);
+        setEditedAt(edited.editedAt);
+        setEditing(false);
+      } catch {
+        // Leave the textarea open with what they typed rather than losing it.
+      } finally {
+        setSaving(false);
+      }
+    });
+  };
+
+  const remove = () => {
+    if (!window.confirm("Delete this message? This can't be undone.")) return;
+    const now = new Date().toISOString();
+    setBody([]);
+    setDeletedAt(now);
+    startTransition(async () => {
+      try {
+        await deleteMessageAction(message.id);
+      } catch {
+        // Put it back if the write didn't land.
+        setBody(message.body);
+        setDeletedAt(message.deletedAt);
+      }
+    });
+  };
+
   const react = (emoji: string) => {
     if (!currentUser) return;
     setPicking(false);
@@ -107,8 +200,12 @@ function MessageRow({
     });
   };
 
+  const deleted = Boolean(deletedAt);
+
   return (
     <li id={message.id} className="group/msg scroll-mt-6">
+      {parentMessage ? <ReplyReference message={parentMessage} /> : null}
+
       <div className="mb-1.5 flex items-center gap-2">
         <PersonAvatar personId={message.authorId} className="size-5" />
         <span className="font-semibold text-k-black-84 text-md">
@@ -117,6 +214,9 @@ function MessageRow({
         <span className="text-k-black-40 text-md">
           {formatShortDate(message.createdAt)}
         </span>
+        {editedAt && !deleted ? (
+          <span className="text-k-black-36 text-sm">(edited)</span>
+        ) : null}
         {message.isNote ? (
           <span className="rounded bg-k-yellow-16 px-1.5 py-px font-medium text-2xs text-k-black-72">
             Note
@@ -134,13 +234,54 @@ function MessageRow({
         <div
           className={cn(
             "rounded-xl px-4 py-3 transition-colors",
-            isOwn ? "bg-k-blue-06" : "bg-k-black-03-solid",
+            isOwn && !deleted ? "bg-k-blue-06" : "bg-k-black-03-solid",
             focused && "outline outline-2 outline-k-blue-32 outline-offset-2",
           )}
         >
-          <RichText blocks={message.body} />
+          {deleted ? (
+            <p className="text-k-black-36 text-md italic">Message deleted</p>
+          ) : editing ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditing(false);
+                  }
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    saveEdit();
+                  }
+                }}
+                rows={2}
+                className="w-full resize-none rounded-lg border border-k-black-16 bg-background px-2.5 py-2 text-k-black-84 text-md outline-none"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={saving || !draft.trim()}
+                  onClick={saveEdit}
+                  className="flex h-7 items-center rounded-lg bg-k-blue px-3 font-medium text-k-white text-sm transition-opacity hover:opacity-90 disabled:opacity-40"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  className="flex h-7 items-center rounded-lg px-3 text-k-black-56 text-sm hover:bg-k-black-04"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <RichText blocks={body} />
+          )}
 
-          {message.attachments?.length ? (
+          {!deleted && !editing && message.attachments?.length ? (
             <ul className="mt-3 flex flex-wrap gap-2">
               {message.attachments.map((file) => (
                 <li key={file.id} className={isMedia(file) ? "w-full" : undefined}>
@@ -151,30 +292,41 @@ function MessageRow({
           ) : null}
         </div>
 
-        <div className="-top-3 absolute right-2 flex items-center gap-0.5 rounded-lg bg-background p-0.5 opacity-0 shadow-popover transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100">
-          <HoverAction
-            label="React"
-            aria-expanded={picking}
-            onClick={() => setPicking((open) => !open)}
-          >
-            <SmilePlusIcon className="size-4" strokeWidth={1.6} />
-          </HoverAction>
-          {/*
-            Reply and More stay behind the flag: threading isn't in the model
-            (a Message has no parent), and "More" would be edit/delete, which
-            aren't either. React is out because reactions are now real.
-          */}
-          {isEnabled("messageActions") ? (
-            <>
-              <HoverAction label="Reply">
-                <ReplyIcon className="size-4" strokeWidth={1.6} />
-              </HoverAction>
-              <HoverAction label="More">
-                <MoreHorizontalIcon className="size-4" strokeWidth={1.6} />
-              </HoverAction>
-            </>
-          ) : null}
-        </div>
+        {!deleted && !editing ? (
+          <div className="-top-3 absolute right-2 flex items-center gap-0.5 rounded-lg bg-background p-0.5 opacity-0 shadow-popover transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100">
+            <HoverAction
+              label="React"
+              aria-expanded={picking}
+              onClick={() => setPicking((open) => !open)}
+            >
+              <SmilePlusIcon className="size-4" strokeWidth={1.6} />
+            </HoverAction>
+            {isEnabled("messageActions") ? (
+              <>
+                <HoverAction label="Reply" onClick={() => onReply?.(message)}>
+                  <ReplyIcon className="size-4" strokeWidth={1.6} />
+                </HoverAction>
+                {canEdit ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      aria-label="More"
+                      title="More"
+                      className="flex size-7 items-center justify-center rounded-md text-k-black-56 transition-colors hover:bg-k-black-04 hover:text-k-black-84"
+                    >
+                      <MoreHorizontalIcon className="size-4" strokeWidth={1.6} />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-36">
+                      <DropdownMenuItem onClick={startEdit}>Edit</DropdownMenuItem>
+                      <DropdownMenuItem variant="destructive" onClick={remove}>
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        ) : null}
 
         {picking ? (
           <EmojiPicker
@@ -186,7 +338,7 @@ function MessageRow({
         ) : null}
       </div>
 
-      {reactions.length ? (
+      {!deleted && reactions.length ? (
         <div className="mt-1.5 flex flex-wrap gap-1">
           {reactions.map((reaction) => (
             <ReactionPill
@@ -199,6 +351,37 @@ function MessageRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * The quoted preview above a reply — author + a one-line snippet of the
+ * parent's body, linking to the `#messageId` anchor every row already
+ * carries so a click reuses the existing hash-driven scroll-and-highlight
+ * (`useFocusedMessage` above) instead of a bespoke scroll handler.
+ */
+function ReplyReference({ message }: { message: Message }) {
+  const author = usePerson(message.authorId);
+  const people = usePeople();
+  const handles = useMemo(
+    () => Object.fromEntries(Object.values(people).map((p) => [p.id, p.handle])),
+    [people],
+  );
+  const preview = message.deletedAt
+    ? "Message deleted"
+    : blocksToText(message.body, handles).replace(/\s+/g, " ").trim();
+
+  return (
+    <a
+      href={`#${message.id}`}
+      className="mb-1 flex items-center gap-1.5 pl-6 text-k-black-40 text-sm hover:text-k-black-72"
+    >
+      <ReplyIcon className="size-3 shrink-0 -scale-x-100" strokeWidth={1.8} />
+      <span className="truncate">
+        <span className="font-medium">{author?.name ?? "Someone"}</span>
+        {preview ? `: ${preview.slice(0, 80)}` : ""}
+      </span>
+    </a>
   );
 }
 

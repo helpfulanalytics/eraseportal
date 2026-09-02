@@ -15,6 +15,7 @@ import { renderEmail } from "./layout";
 import { STREAM_ACCENT, streamFrom } from "./streams";
 import { REPLY_TO } from "./brand";
 import {
+  buildCardAddedEmail,
   buildFileUploadedEmail,
   buildInviteAcceptedEmail,
   buildInviteEmail,
@@ -108,6 +109,18 @@ export const PREVIEWS: Record<string, () => EmailDraft> = {
       organizationName: "Northgate Kitchens",
       orgSlug: "northgate-kitchens",
       tasksUrl: `${SITE}/w/northgate-kitchens/tasks`,
+    }),
+  "card-added": () =>
+    buildCardAddedEmail({
+      to: "tosin@erasefriction.com",
+      authorName: "Brooks Conkle",
+      cardId: "card-sample",
+      cardTitle: "Confirm final quartz slab selection with Northgate before ordering",
+      boardName: "Phase 2 — Millwork",
+      folderName: "Erase Friction Portal",
+      organizationName: "Northgate Kitchens",
+      orgSlug: "northgate-kitchens",
+      boardUrl: `${SITE}/w/northgate-kitchens/boards/board-sample`,
     }),
 };
 

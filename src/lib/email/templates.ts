@@ -426,3 +426,59 @@ export async function sendTaskCompletedEmail(input: TaskCompletedInput): Promise
     console.error("Couldn't send task-completed email:", cause);
   }
 }
+
+/* ---- boards ------------------------------------------------------------ */
+
+export interface CardAddedInput {
+  to: string;
+  authorName: string;
+  cardId: string;
+  cardTitle: string;
+  boardName: string;
+  folderName?: string;
+  organizationName?: string;
+  orgSlug?: string;
+  boardUrl: string;
+}
+
+/**
+ * A board card has no participant/watcher list of its own (unlike a
+ * Conversation), so this rides the `tasks` stream rather than a new one — a
+ * card is the closest thing this product already emails about, and adding a
+ * fifth stream means a new sender address to provision in `docs/email.md`
+ * for one notification.
+ */
+export function buildCardAddedEmail(input: CardAddedInput): EmailDraft {
+  return {
+    subject: `${input.authorName} added a card to ${input.boardName}`,
+    stream: "tasks",
+    type: "card-added",
+    actorName: input.authorName,
+    // Cards added to the same board thread together in the inbox.
+    threadKey: input.cardId,
+    content: {
+      eyebrow: "New card",
+      headline: `${input.authorName} added a card to ${input.boardName}`,
+      preheader: excerpt(input.cardTitle, 140),
+      quote: { author: "Card", body: input.cardTitle },
+      facts: facts([
+        { label: "Board", value: input.boardName },
+        input.folderName ? { label: "Folder", value: input.folderName } : null,
+        input.organizationName ? { label: "Client", value: input.organizationName } : null,
+        { label: "Added by", value: input.authorName },
+        { label: "Added", value: timestamp() },
+      ]),
+      cta: { label: "Open the board", href: input.boardUrl },
+      reason: `You're receiving this because you're on the ${PRODUCT_SHORT} team and have access to ${input.boardName}.`,
+      settingsUrl: settingsUrl(input.orgSlug),
+    },
+  };
+}
+
+export async function sendCardAddedEmail(input: CardAddedInput): Promise<void> {
+  try {
+    await sendEmail({ to: input.to, ...buildCardAddedEmail(input) });
+  } catch (cause) {
+    console.error("Couldn't send card-added email:", cause);
+  }
+}

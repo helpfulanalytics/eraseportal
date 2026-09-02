@@ -97,6 +97,7 @@ import type {
 import { adminMessaging } from "@/lib/firebase/admin";
 import { SITE_URL } from "@/lib/email/resend";
 import {
+  sendCardAddedEmail,
   sendInviteAcceptedEmail,
   sendInviteEmail,
   sendNewMessageEmail,
@@ -1269,14 +1270,100 @@ export async function createCardAction(input: {
   const title = input.title.trim();
   if (!title) throw new Error("A card needs a title.");
 
-  await createCard({
+  const card = await createCard({
     ...input,
     title,
     authorId: me.id,
     description: input.description?.trim() || undefined,
     attachments: sanitizeAttachments(input.attachments ?? []),
   });
+
+  // `after()`, not a bare fire-and-forget: an un-awaited promise can be torn
+  // down with the function once the response is sent, before it runs.
+  after(() =>
+    notifyMembersOfCardAdded({ boardId: input.boardId, card, author: me }).catch(
+      (cause) => console.error("Couldn't send card-added notification:", cause),
+    ),
+  );
+
   revalidatePath("/w/[orgSlug]/boards/[boardId]", "page");
+}
+
+/**
+ * Best-effort — a failed send must never fail the card create it rides with.
+ * A board carries no participant/watcher list of its own (unlike a
+ * Conversation), so this notifies every agency member but the card's author,
+ * same broadcast shape as `registerUpload`'s file notification.
+ */
+async function notifyMembersOfCardAdded(input: {
+  boardId: string;
+  card: { id: string; title: string };
+  author: Person;
+}): Promise<void> {
+  const board = await getBoard(input.boardId);
+  if (!board) return;
+
+  const folder = await getFolder(board.folderId);
+  const organization = folder?.organizationId
+    ? await getOrganization(folder.organizationId)
+    : undefined;
+  const boardUrl = organization
+    ? `${SITE_URL}/w/${organization.slug}/boards/${board.id}`
+    : SITE_URL;
+
+  const people = await getPeople();
+  const recipients = Object.values(people).filter(
+    (person) => person.kind === "member" && person.id !== input.author.id,
+  );
+
+  await Promise.all(
+    recipients.map(async (recipient) => {
+      await sendCardAddedEmail({
+        to: recipient.email,
+        authorName: input.author.name,
+        cardId: input.card.id,
+        cardTitle: input.card.title,
+        boardName: board.name,
+        folderName: folder?.name,
+        organizationName: organization?.name,
+        orgSlug: organization?.slug,
+        boardUrl,
+      });
+
+      if (recipient.fcmTokens && recipient.fcmTokens.length > 0) {
+        try {
+          const response = await adminMessaging().sendEachForMulticast({
+            tokens: recipient.fcmTokens,
+            notification: {
+              title: `New card in ${board.name}`,
+              body: `${input.author.name} added "${input.card.title}"`,
+            },
+            data: { url: boardUrl },
+          });
+
+          if (response.failureCount > 0) {
+            const failedTokens: string[] = [];
+            response.responses.forEach((resp, idx) => {
+              if (!resp.success) {
+                const errCode = resp.error?.code;
+                if (
+                  errCode === "messaging/invalid-registration-token" ||
+                  errCode === "messaging/registration-token-not-registered"
+                ) {
+                  failedTokens.push(recipient.fcmTokens![idx]);
+                }
+              }
+            });
+            await Promise.all(
+              failedTokens.map((token) => removeDeviceToken(recipient.id, token)),
+            );
+          }
+        } catch (fcmError) {
+          console.error("Couldn't send card-added push notification:", fcmError);
+        }
+      }
+    }),
+  );
 }
 
 export async function addCardAttachmentAction(

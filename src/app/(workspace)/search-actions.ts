@@ -5,7 +5,7 @@ import {
   getCurrentUser,
   getFolders,
   getOrganizations,
-  getPeople,
+  getVisiblePeople,
   getFolderItems,
 } from "@/lib/kitchen-data";
 import { itemHref } from "@/lib/kitchen-format";
@@ -65,7 +65,7 @@ export async function searchWorkspaceAction(
   const orgIdToSlug = new Map(orgs.map((o) => [o.id, o.slug]));
 
   // 2. People
-  const people = await getPeople();
+  const people = await getVisiblePeople(me);
   for (const person of Object.values(people)) {
     if (person.name.toLowerCase().includes(lowerQuery) || person.handle.toLowerCase().includes(lowerQuery)) {
       add({

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { WorkspaceProvider } from "@/components/workspace-provider";
 import { requireOrgWorkspaceAccess } from "@/lib/access-guard";
-import { getNavTree, getOrganizations, getPeople } from "@/lib/kitchen-data";
+import { getNavTree, getOrganizations, getVisiblePeople } from "@/lib/kitchen-data";
 
 /**
  * The gate and data root for one organization's workspace — every folder,
@@ -30,7 +30,7 @@ export default async function OrgWorkspaceLayout({
   // optimisation worth the extra branch, it's just not fetching data nobody
   // can use, same as `/w/[orgSlug]/page.tsx` already does for "All organizations".
   const [people, navFolders, organizations] = await Promise.all([
-    getPeople(),
+    getVisiblePeople(me),
     getNavTree({ organizationId: organization.id }),
     me.kind === "member" ? getOrganizations() : Promise.resolve([]),
   ]);

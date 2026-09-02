@@ -263,6 +263,26 @@ export async function getPeople(): Promise<Record<string, Person>> {
   return Object.fromEntries(list.map((p) => [p.id, p]));
 }
 
+/**
+ * `getPeople()` narrowed to who `viewer` should actually see — every picker
+ * in the app (card assignee, share dialog, @mentions' fallback data) reads
+ * from `usePeople()`, and that map was the *entire product's* people
+ * regardless of who was looking. A member legitimately needs everyone, since
+ * they work across every client; a client should see agency members (who
+ * they work with) and their own org's other people, not every other client
+ * in every other organization.
+ */
+export async function getVisiblePeople(viewer: Person): Promise<Record<string, Person>> {
+  const people = await getPeople();
+  if (viewer.kind === "member") return people;
+
+  return Object.fromEntries(
+    Object.entries(people).filter(
+      ([, p]) => p.kind === "member" || p.organizationId === viewer.organizationId,
+    ),
+  );
+}
+
 export async function getClients(): Promise<Person[]> {
   return many<Person>(
     collection(COLLECTIONS.people).where("kind", "==", "client"),

@@ -69,7 +69,7 @@ export function BlockRow({
    * an empty document with no prompt in it reads as broken.
    */
   primary: boolean;
-  onInput: (html: string) => void;
+  onInput: (html: string, el: HTMLElement) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLElement>, el: HTMLElement) => void;
   onPasteText: (text: string, el: HTMLElement) => void;
   onToggleTodo: () => void;
@@ -177,7 +177,7 @@ export function BlockRow({
           aria-multiline="true"
           aria-label={blockPlaceholder(block.type)}
           spellCheck
-          onInput={(e) => onInput(e.currentTarget.innerHTML)}
+          onInput={(e) => onInput(e.currentTarget.innerHTML, e.currentTarget)}
           onKeyDown={(e) => onKeyDown(e, e.currentTarget)}
           onPaste={(e) => {
             // Always paste as plain text. Anything else drops a foreign

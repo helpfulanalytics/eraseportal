@@ -172,3 +172,54 @@ export function insertLineBreak(): void {
 export function insertPlainText(text: string): void {
   document.execCommand("insertText", false, text);
 }
+
+/** Turns the current selection into a link — the manual, "select text and link it" path. */
+export function applyLink(url: string): void {
+  document.execCommand("createLink", false, url);
+}
+
+/**
+ * Wraps the word ending `url.length` characters before the caret in a link,
+ * then restores the caret to where it was (just after the trailing space
+ * that triggered this). Used to auto-link a URL as it's typed — same
+ * execCommand approach as `applyInlineFormat`, just with a synthetic
+ * selection instead of the user's own.
+ *
+ * `false` on anything that doesn't line up (offset math runs off the end of
+ * the block's text nodes) — the URL is simply left as plain text rather than
+ * risking a mangled range.
+ */
+export function autolinkWordBeforeCaret(el: HTMLElement, url: string): boolean {
+  const selection = window.getSelection();
+  if (!selection) return false;
+
+  const caret = caretOffset(el);
+  const start = caret - 1 - url.length; // -1 for the trailing space just typed
+  if (start < 0) return false;
+
+  const range = document.createRange();
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  let pos = 0;
+  let startSet = false;
+
+  while (node) {
+    const length = node.textContent?.length ?? 0;
+    if (!startSet && pos + length >= start) {
+      range.setStart(node, start - pos);
+      startSet = true;
+    }
+    if (startSet && pos + length >= start + url.length) {
+      range.setEnd(node, start + url.length - pos);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.execCommand("createLink", false, url);
+      focusAtOffset(el, caret);
+      return true;
+    }
+    pos += length;
+    node = walker.nextNode();
+  }
+
+  return false;
+}

@@ -42,6 +42,8 @@ import {
 } from "@/components/document/block-types";
 import {
   applyInlineFormat,
+  applyLink,
+  autolinkWordBeforeCaret,
   caretAtEnd,
   caretAtStart,
   caretRect,
@@ -79,6 +81,15 @@ interface MenuState {
 
 /** The types that continue themselves when you press Enter at the end. */
 const CONTINUING: DocBlockType[] = ["bullet", "numbered", "todo"];
+
+/**
+ * A URL ending the text right before the caret — same pattern the
+ * conversation composer's `parseInline` autolinks with, so a URL reads the
+ * same way whether it lands in a message or a doc. Anchored to the end of
+ * the string: the caller always passes the text with its trailing space
+ * removed, so a match here is specifically the word that space completed.
+ */
+const AUTOLINK_URL = /https?:\/\/[^\s<]+[^\s<.,:;"')\]}]$/;
 
 export function BlockEditor({
   documentId,
@@ -194,7 +205,7 @@ export function BlockEditor({
   );
 
   const onInput = useCallback(
-    (id: string, html: string) => {
+    (id: string, html: string, el: HTMLElement) => {
       const index = indexOf(id);
       if (index === -1) return;
       const block = blocks[index];
@@ -206,6 +217,19 @@ export function BlockEditor({
         const shortcut = MARKDOWN_SHORTCUTS.find((s) => text.startsWith(s.prefix));
         if (shortcut) {
           applyMarkdown(index, shortcut.type, shortcut.prefix, html, text);
+          return;
+        }
+      }
+
+      // Auto-link a URL the instant its trailing space is typed — anchored
+      // to the caret rather than the block start, so it fires mid-paragraph
+      // the way the markdown shortcuts above deliberately don't. A space at
+      // the very end of a contenteditable is `&nbsp;` (U+00A0), not a plain
+      // space, so both count as "just typed a space".
+      if (block.type !== "code" && /[  ]$/.test(text)) {
+        const match = AUTOLINK_URL.exec(text.slice(0, -1));
+        if (match && autolinkWordBeforeCaret(el, match[0])) {
+          commit(replaceAt(index, { html: el.innerHTML }));
           return;
         }
       }
@@ -434,6 +458,19 @@ export function BlockEditor({
         return;
       }
 
+      // Cmd/Ctrl+K on a selection turns it into a link — the manual path for
+      // link text that isn't a bare URL, which auto-linking in `onInput`
+      // can't cover. A native prompt rather than a popover, matching this
+      // codebase's own preference (see `window.confirm` elsewhere) for a
+      // one-off single value over a bespoke component.
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (!hasSelection(el)) return;
+        const url = window.prompt("Link URL")?.trim();
+        if (url) applyLink(url);
+        return;
+      }
+
       if (mod && e.key === "Enter" && block.type === "todo") {
         e.preventDefault();
         commit(replaceAt(index, { checked: !block.checked }));
@@ -644,7 +681,7 @@ export function BlockEditor({
                 ordinal={ordinals[i]}
                 editable={editable}
                 primary={i === 0}
-                onInput={(html) => onInput(block.id, html)}
+                onInput={(html, el) => onInput(block.id, html, el)}
                 onKeyDown={(e, el) => onKeyDown(block.id, e, el)}
                 onPasteText={(text, el) => onPasteText(block.id, text, el)}
                 onToggleTodo={() =>

@@ -270,6 +270,51 @@ export function BoardColumns({
     });
   };
 
+  // The "Move to <column>" menu item and "Delete card" were the two
+  // mutations in this file that didn't match its own stated rule (every
+  // mutation here is optimistic-with-revert) — they waited on
+  // `revalidatePath` to bring the change back down before anything visibly
+  // changed. Same shape as `renameColumn`/`deleteColumn` above.
+  const moveCardToColumn = (cardId: string, toColumnId: string) => {
+    const previous = columns;
+    setColumns((prev) => {
+      const fromColumn = prev.find((c) => c.cards.some((c2) => c2.id === cardId));
+      if (!fromColumn) return prev;
+      const card = fromColumn.cards.find((c) => c.id === cardId);
+      if (!card) return prev;
+      return prev.map((c) => {
+        if (c.id === fromColumn.id) {
+          return { ...c, cards: c.cards.filter((c2) => c2.id !== cardId) };
+        }
+        if (c.id === toColumnId) {
+          return { ...c, cards: [...c.cards, card] };
+        }
+        return c;
+      });
+    });
+    startTransition(async () => {
+      try {
+        await moveCardAction(boardId, cardId, toColumnId);
+      } catch {
+        setColumns(previous);
+      }
+    });
+  };
+
+  const removeCard = (cardId: string) => {
+    const previous = columns;
+    setColumns((prev) =>
+      prev.map((c) => ({ ...c, cards: c.cards.filter((c2) => c2.id !== cardId) })),
+    );
+    startTransition(async () => {
+      try {
+        await deleteCardAction(boardId, cardId);
+      } catch {
+        setColumns(previous);
+      }
+    });
+  };
+
   const addColumn = async (name: string) => {
     const column = await addBoardColumnAction(boardId, name);
     setColumns((prev) => [...prev, { ...column, cards: [] }]);
@@ -283,6 +328,13 @@ export function BoardColumns({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
+      // The board's own horizontal scroller and each column's vertical one
+      // are both scrollable ancestors of a dragged card, and dnd-kit's
+      // default 20%-of-container edge zone reads as "nothing happens until
+      // the pointer is basically at the edge" on a board this dense — wider
+      // zones here mean a drag toward an off-screen column starts scrolling
+      // well before the pointer reaches it.
+      autoScroll={{ threshold: { x: 0.3, y: 0.25 } }}
     >
       <div className="min-h-0 flex-1 overflow-x-auto px-5 pb-5">
         <div className="flex h-full min-w-max gap-3">
@@ -298,6 +350,8 @@ export function BoardColumns({
               }
               onRename={(name) => renameColumn(column.id, name)}
               onDelete={() => deleteColumn(column.id)}
+              onMoveCard={moveCardToColumn}
+              onDeleteCard={removeCard}
             />
           ))}
           <AddColumnForm onAdd={addColumn} />
@@ -333,6 +387,8 @@ function Column({
   onEditCard,
   onRename,
   onDelete,
+  onMoveCard,
+  onDeleteCard,
 }: {
   column: BoardColumn;
   boardId: string;
@@ -341,6 +397,8 @@ function Column({
   onEditCard: (card: BoardCard) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onMoveCard: (cardId: string, toColumnId: string) => void;
+  onDeleteCard: (cardId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const cardIds = column.cards.map((c) => c.id);
@@ -448,10 +506,11 @@ function Column({
             <li key={card.id}>
               <SortableCard
                 card={card}
-                boardId={boardId}
                 columnId={column.id}
                 columns={allColumns}
                 onEdit={() => onEditCard(card)}
+                onMove={(toColumnId) => onMoveCard(card.id, toColumnId)}
+                onDelete={() => onDeleteCard(card.id)}
               />
             </li>
           ))}
@@ -466,10 +525,11 @@ function Column({
 
 function SortableCard(props: {
   card: BoardCard;
-  boardId: string;
   columnId: string;
   columns: BoardColumn[];
   onEdit: () => void;
+  onMove: (toColumnId: string) => void;
+  onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: props.card.id });
@@ -490,18 +550,20 @@ function SortableCard(props: {
 
 function Card({
   card,
-  boardId,
   columnId,
   columns,
   onEdit,
+  onMove,
+  onDelete,
   dragProps,
   isDragging,
 }: {
   card: BoardCard;
-  boardId: string;
   columnId: string;
   columns: BoardColumn[];
   onEdit: () => void;
+  onMove: (toColumnId: string) => void;
+  onDelete: () => void;
   /**
    * dnd-kit's `attributes` + `listeners`, spread on the whole card rather
    * than a dedicated handle — matching Trello, where the entire card picks
@@ -521,16 +583,7 @@ function Card({
   dragProps: React.ComponentPropsWithRef<"article">;
   isDragging: boolean;
 }) {
-  const [pending, startTransition] = useTransition();
   const otherColumns = columns.filter((c) => c.id !== columnId);
-
-  const move = (toColumnId: string) => {
-    startTransition(() => moveCardAction(boardId, card.id, toColumnId));
-  };
-
-  const remove = () => {
-    startTransition(() => deleteCardAction(boardId, card.id));
-  };
 
   return (
     <article
@@ -538,14 +591,12 @@ function Card({
       aria-label={card.title}
       className={cn(
         "group relative cursor-grab touch-none rounded-lg bg-background p-3 shadow-[0_0_0_0.5px_var(--k-black-08)] transition-shadow active:cursor-grabbing hover:shadow-[0_0_0_0.5px_var(--k-black-16)]",
-        pending && "pointer-events-none opacity-50",
         isDragging && "opacity-40",
       )}
     >
       <button
         type="button"
         onClick={onEdit}
-        disabled={pending}
         className="block w-full text-left"
         aria-label={`Open "${card.title}"`}
       >
@@ -555,7 +606,6 @@ function Card({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Card options"
-          disabled={pending}
           className="absolute top-2 right-2 flex size-6 items-center justify-center rounded-md text-k-black-36 opacity-0 transition-opacity hover:bg-k-black-06 hover:text-k-black-84 focus-visible:opacity-100 group-hover:opacity-100"
         >
           <MoreHorizontalIcon className="size-4" strokeWidth={1.7} />
@@ -566,7 +616,7 @@ function Card({
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Move to</DropdownMenuLabel>
                 {otherColumns.map((col) => (
-                  <DropdownMenuItem key={col.id} onClick={() => move(col.id)}>
+                  <DropdownMenuItem key={col.id} onClick={() => onMove(col.id)}>
                     {col.name}
                   </DropdownMenuItem>
                 ))}
@@ -574,7 +624,7 @@ function Card({
               <DropdownMenuSeparator />
             </>
           ) : null}
-          <DropdownMenuItem variant="destructive" onClick={remove}>
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
             Delete card
           </DropdownMenuItem>
         </DropdownMenuContent>

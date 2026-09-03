@@ -426,7 +426,18 @@ export function CardDialog({
         pending={pending}
         error={error ?? attachmentError}
       >
-        <div className="flex flex-col gap-5 px-6 pb-2">
+        <div
+          className="flex flex-col gap-5 px-6 pb-2"
+          onPaste={(e) => {
+            // A screenshot on the clipboard arrives as a file, not as text —
+            // same check the conversation composer pastes through.
+            const files = Array.from(e.clipboardData.files);
+            if (files.length) {
+              e.preventDefault();
+              void stageAttachments(files);
+            }
+          }}
+        >
           <input
             ref={attachFileRef}
             type="file"
@@ -610,7 +621,20 @@ export function CardDialog({
       }
     >
       <div className="flex items-start gap-6 px-6 pb-2">
-        <div className="flex min-w-0 flex-[3] flex-col gap-4">
+        <div
+          className="flex min-w-0 flex-[3] flex-col gap-4"
+          onPaste={(e) => {
+            // A screenshot on the clipboard arrives as a file, not as text —
+            // same check the conversation composer pastes through. Scoped to
+            // this column, not the whole dialog, so pasting into the comment
+            // box on the right still pastes as text there.
+            const files = Array.from(e.clipboardData.files);
+            if (files.length) {
+              e.preventDefault();
+              void attachToCard(files);
+            }
+          }}
+        >
           {/* Title — click the heading, not a labelled field; it reads as
               content, not a form. */}
           {editingTitle ? (

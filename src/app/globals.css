@@ -412,10 +412,16 @@
   --k-white-72: #000000b8;
   --k-white-84: #000000d6;
 
-  /* named greys, inverted for a dark surface */
+  /*
+   * Named greys, inverted for a dark surface. `--k-gray-f5` stays the outer
+   * "desk" tone the app shell sits on (`bg-k-page`, app-shell.tsx) — kept
+   * distinctly darker than `--background` below so the inset, rounded main
+   * panel still reads as a raised canvas floating on it, the same relationship
+   * light mode gets for free from gray-f5 (#f5f5f5) against a white panel.
+   */
   --k-gray-e0: #313135;
   --k-gray-f3: #1e1e21;
-  --k-gray-f5: #18181b;
+  --k-gray-f5: #101012;
   --k-gray-e4: #353538;
   --k-gray-ad: #737376;
   --k-gray-8f: #8f8f93;
@@ -429,12 +435,19 @@
   --k-shadow-overlay: 0 0 0 0.5px #00000029, 0 6px 32px 0 #00000052;
   --k-shadow-popover: 0 0 0 0.5px #0000001f, 0 4px 16px 0 #00000029;
 
-  /* ---- shadcn semantic mapping ------------------------------------ */
-  --background: var(--k-gray-f5);
+  /*
+   * ---- shadcn semantic mapping ------------------------------------
+   * Light mode's --background/--card/--popover/--sidebar are all the same
+   * literal white — one "raised" tone, separated from the page only by
+   * `--k-page-bg`. Mirrored here as one shared inner tone, lighter than
+   * `--k-gray-f5` above, rather than reusing `--k-gray-f5` itself (which
+   * would collapse outer and inner into the same color).
+   */
+  --background: #1c1c1f;
   --foreground: #e8e8e8;
-  --card: #202023;
+  --card: #1c1c1f;
   --card-foreground: #e8e8e8;
-  --popover: #222225;
+  --popover: #1c1c1f;
   --popover-foreground: #e8e8e8;
   --primary: var(--k-blue);
   --primary-foreground: var(--k-white);

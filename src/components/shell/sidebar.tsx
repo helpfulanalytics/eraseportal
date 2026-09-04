@@ -8,8 +8,10 @@ import {
   ChevronRightIcon,
   ChevronsUpDownIcon,
   ExternalLinkIcon,
+  FileIcon,
   FileTextIcon,
   FolderIcon,
+  ImageIcon,
   LayoutTemplateIcon,
   LinkIcon,
   MessageSquareIcon,
@@ -81,8 +83,13 @@ type NavItem = NavFolder["items"][number];
  * (folderId, createdAt, authorId — fields the sidebar never fetches). Keeping
  * this one deliberately slim rather than widening `NavFolder.items` to match
  * `FolderItem` just to reuse one switch statement.
+ *
+ * A file has no page of its own — same as everywhere else it appears in the
+ * app — so its row links to the folder it's in, `folderHref`, rather than
+ * inventing a destination that doesn't exist. Clicking it lands you next to
+ * it in the folder's own list, where the real preview dialog lives.
  */
-function hrefFor(item: NavItem, orgSlug: string): string {
+function hrefFor(item: NavItem, orgSlug: string, folderHref: string): string {
   switch (item.kind) {
     case "conversation":
       return `/w/${orgSlug}/conversations/${item.id}`;
@@ -92,6 +99,8 @@ function hrefFor(item: NavItem, orgSlug: string): string {
       return `/w/${orgSlug}/documents/${item.id}`;
     case "embed":
       return `/w/${orgSlug}/embeds/${item.id}`;
+    case "file":
+      return folderHref;
   }
 }
 
@@ -99,7 +108,9 @@ function hrefFor(item: NavItem, orgSlug: string): string {
  * Link is stored as an embed whose provider says "Link" — see `createEmbed`
  * in kitchen-data.ts — so distinguishing the two icons means reading
  * `meta.provider`, not `kind`. A canvas document is the same shape of
- * exception: same `kind`, different `meta.docKind`.
+ * exception: same `kind`, different `meta.docKind`. A file's icon reads
+ * `meta.mime` the same way `ItemThumb` does, so an uploaded image gets the
+ * image glyph rather than the generic file one.
  */
 function iconFor(item: NavItem) {
   switch (item.kind) {
@@ -115,6 +126,10 @@ function iconFor(item: NavItem) {
       return item.meta.type === "embed" && item.meta.provider === "Link"
         ? ExternalLinkIcon
         : LinkIcon;
+    case "file":
+      return item.meta.type === "file" && item.meta.mime?.startsWith("image/")
+        ? ImageIcon
+        : FileIcon;
   }
 }
 
@@ -293,7 +308,7 @@ function CollapsibleFolder({
   
   const [isOpen, setIsOpen] = useState(() => {
     if (pathname === href) return true;
-    if (folder.items.some((item) => pathname === hrefFor(item, orgSlug))) return true;
+    if (folder.items.some((item) => pathname === hrefFor(item, orgSlug, href))) return true;
     return true; // Default open
   });
 
@@ -341,13 +356,18 @@ function CollapsibleFolder({
           <SortableContext items={folder.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
             <ul className="flex flex-col gap-px pt-0.5">
               {folder.items.map((item) => {
-                const itemHref = hrefFor(item, orgSlug);
+                const itemHref = hrefFor(item, orgSlug, href);
                 const Icon = iconFor(item);
+                // A file's href is its folder's — every file in the folder
+                // would otherwise light up together the moment you're on
+                // that page, the same reason the client rows below are
+                // never "active".
+                const active = item.kind !== "file" && pathname === itemHref;
                 return (
                   <SortableSidebarItem key={item.id} id={item.id}>
                     <SidebarRow
                       href={itemHref}
-                      active={pathname === itemHref}
+                      active={active}
                       className="pl-8"
                     >
                       <Icon

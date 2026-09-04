@@ -617,15 +617,13 @@ export async function getNavTree(opts?: { organizationId?: string }): Promise<Na
         id: folder.id,
         name: folder.name,
         color: folder.color,
-        items: items
-          .filter((i) => i.kind !== "file")
-          .map((i) => ({
-            id: i.id,
-            name: i.name,
-            kind: i.kind as Exclude<ItemKind, "file">,
-            meta: i.meta,
-            color: i.kind === "board" ? boardColor.get(i.id) : undefined,
-          })),
+        items: items.map((i) => ({
+          id: i.id,
+          name: i.name,
+          kind: i.kind,
+          meta: i.meta,
+          color: i.kind === "board" ? boardColor.get(i.id) : undefined,
+        })),
         clients: clients.map((c) => ({
           id: c.id,
           name: c.name,

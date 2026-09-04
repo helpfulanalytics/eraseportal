@@ -624,11 +624,9 @@ export type ConversationFile = Attachment & {
  *
  * One unified `items` list rather than separate `boards`/`conversations`
  * arrays (the earlier shape) — the sidebar shows every kind of folder
- * content now, not just those two, and a per-kind array for each of
- * conversation/board/document/embed would just be the same list partitioned
- * five ways for no benefit. `file` is deliberately excluded: uploaded files
- * don't get their own row in the tree, the same way they don't in Trello's
- * or Notion's sidebars — they're reachable from the folder page and Library.
+ * content, including uploaded files, and a per-kind array for each of
+ * conversation/board/document/embed/file would just be the same list
+ * partitioned five ways for no benefit.
  */
 export interface NavFolder {
   id: string;
@@ -638,7 +636,7 @@ export interface NavFolder {
   items: Array<{
     id: string;
     name: string;
-    kind: Exclude<ItemKind, "file">;
+    kind: ItemKind;
     meta: ItemMeta;
     /** Only set for `kind: "board"` — the board's own colour, not the item's. */
     color?: string;

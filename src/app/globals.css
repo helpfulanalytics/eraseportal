@@ -49,6 +49,19 @@
   --k-black-06-solid: #f0f0f0;
   --k-black-08-solid: #ebebeb;
 
+  /*
+   * Invariant tones — deliberately NOT part of the --k-black-* / --k-white-*
+   * ramps below, which flip direction under `.dark` (see that block). These
+   * three stay the same literal color in both themes because they don't
+   * represent "ink relative to whatever's behind them" the way the ramp
+   * does: a modal scrim dims the *app* regardless of its current theme, and
+   * the two solid-dark chip buttons (share, stop-recording) pair with a
+   * literal white label that isn't part of the ramp either.
+   */
+  --k-scrim-24: #0000003d;
+  --k-scrim-56: #0000008f;
+  --k-solid-dark: #000000d6;
+
   /* white alpha ramp */
   --k-white: #fff;
   --k-white-06: #ffffff0f;
@@ -278,6 +291,9 @@
   --color-k-purple: var(--k-purple);
   --color-k-purple-20: var(--k-purple-20);
   --color-k-page: var(--k-page-bg);
+  --color-k-scrim-24: var(--k-scrim-24);
+  --color-k-scrim-56: var(--k-scrim-56);
+  --color-k-solid-dark: var(--k-solid-dark);
 
   /*
    * Type scale is capped at 14px — the source design ships only 10/11/12/13/14 with
@@ -335,10 +351,112 @@
   --spacing-sidebar: var(--k-sidebar-width);
 }
 
-/* The product is light-only; the dark block is kept as a structural placeholder. */
+/*
+ * Dark theme. The palette above is deliberately alpha ramps over black/white
+ * rather than opaque greys, so it inverts by *flipping which base color the
+ * ramp is blended over* rather than by hand-picking new colors per
+ * component: every `--k-black-NN` becomes the white-based step at the same
+ * alpha, and vice versa. A hover tint, a hairline border, body text ink —
+ * anything using the ramp for "ink relative to the surface behind it" comes
+ * along for free. `--k-scrim-*` and `--k-solid-dark` above are excluded on
+ * purpose (see their comment) and stay untouched here.
+ */
 .dark {
-  --background: var(--k-white);
-  --foreground: #333;
+  color-scheme: dark;
+
+  --k-black-02: #ffffff05;
+  --k-black-03: #ffffff08;
+  --k-black-04: #ffffff0a;
+  --k-black-05: #ffffff0d;
+  --k-black-06: #ffffff0f;
+  --k-black-07: #ffffff12;
+  --k-black-08: #ffffff14;
+  --k-black-09: #ffffff17;
+  --k-black-10: #ffffff1a;
+  --k-black-12: #ffffff1f;
+  --k-black-16: #ffffff29;
+  --k-black-18: #ffffff2e;
+  --k-black-20: #ffffff33;
+  --k-black-22: #ffffff38;
+  --k-black-23: #ffffff3b;
+  --k-black-24: #ffffff3d;
+  --k-black-25: #ffffff40;
+  --k-black-28: #ffffff47;
+  --k-black-30: #ffffff4d;
+  --k-black-32: #ffffff52;
+  --k-black-36: #ffffff5c;
+  --k-black-38: #ffffff61;
+  --k-black-40: #ffffff66;
+  --k-black-50: #ffffff80;
+  --k-black-56: #ffffff8f;
+  --k-black-64: #ffffffa3;
+  --k-black-72: #ffffffb8;
+  --k-black-80: #ffffffcc;
+  --k-black-84: #ffffffd6;
+
+  --k-black-03-solid: #202023;
+  --k-black-04-solid: #232326;
+  --k-black-06-solid: #28282b;
+  --k-black-08-solid: #2d2d30;
+
+  --k-white-06: #0000000f;
+  --k-white-08: #00000014;
+  --k-white-10: #0000001a;
+  --k-white-12: #0000001f;
+  --k-white-16: #00000029;
+  --k-white-24: #0000003d;
+  --k-white-32: #00000052;
+  --k-white-40: #00000066;
+  --k-white-48: #0000007a;
+  --k-white-50: #00000080;
+  --k-white-72: #000000b8;
+  --k-white-84: #000000d6;
+
+  /* named greys, inverted for a dark surface */
+  --k-gray-e0: #313135;
+  --k-gray-f3: #1e1e21;
+  --k-gray-f5: #18181b;
+  --k-gray-e4: #353538;
+  --k-gray-ad: #737376;
+  --k-gray-8f: #8f8f93;
+  --k-gray-f7: #202023;
+  --k-gray-f8: #1f1e1c;
+  --k-gray-b2: #7a7a7d;
+  --k-gray-f4: #1f1f22;
+  --k-gray-e2: #333336;
+
+  /* shadows stay black-based in both themes — depth, not ink, doesn't invert */
+  --k-shadow-overlay: 0 0 0 0.5px #00000029, 0 6px 32px 0 #00000052;
+  --k-shadow-popover: 0 0 0 0.5px #0000001f, 0 4px 16px 0 #00000029;
+
+  /* ---- shadcn semantic mapping ------------------------------------ */
+  --background: var(--k-gray-f5);
+  --foreground: #e8e8e8;
+  --card: #202023;
+  --card-foreground: #e8e8e8;
+  --popover: #222225;
+  --popover-foreground: #e8e8e8;
+  --primary: var(--k-blue);
+  --primary-foreground: var(--k-white);
+  --secondary: var(--k-black-04-solid);
+  --secondary-foreground: #e8e8e8;
+  --muted: var(--k-black-04-solid);
+  --muted-foreground: var(--k-gray-8f);
+  --accent: var(--k-black-04);
+  --accent-foreground: #e8e8e8;
+  --destructive: var(--k-red);
+  --destructive-foreground: var(--k-white);
+  --border: var(--k-black-08);
+  --input: var(--k-black-12);
+  --ring: var(--k-blue-32);
+  --sidebar: #1c1c1f;
+  --sidebar-foreground: #e8e8e8;
+  --sidebar-primary: var(--k-blue);
+  --sidebar-primary-foreground: var(--k-white);
+  --sidebar-accent: var(--k-black-04);
+  --sidebar-accent-foreground: #e8e8e8;
+  --sidebar-border: var(--k-black-08);
+  --sidebar-ring: var(--k-blue-32);
 }
 
 @layer base {

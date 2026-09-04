@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import { DesktopOnlyOverlay } from "@/components/desktop-only-overlay";
 import { Agentation } from "agentation";
 import "./globals.css";
@@ -67,11 +68,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistMono.variable} h-full antialiased`}
       style={{ "--font-sans": SANS_STACK } as React.CSSProperties}
+      suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col">
-        <DesktopOnlyOverlay />
-        {children}
-        {process.env.NODE_ENV === "development" ? <Agentation /> : null}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <DesktopOnlyOverlay />
+          {children}
+          {process.env.NODE_ENV === "development" ? <Agentation /> : null}
+        </ThemeProvider>
       </body>
     </html>
   );

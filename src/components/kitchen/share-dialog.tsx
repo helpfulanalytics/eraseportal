@@ -127,7 +127,7 @@ export function ShareDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-8 items-center gap-1.5 rounded-lg bg-k-black-84 px-3 text-k-white text-md transition-opacity hover:opacity-90"
+        className="flex h-8 items-center gap-1.5 rounded-lg bg-k-solid-dark px-3 text-k-white text-md transition-opacity hover:opacity-90"
       >
         <ShareIcon className="size-3.5" strokeWidth={1.8} />
         Share
@@ -137,7 +137,7 @@ export function ShareDialog({
         <div
           role="presentation"
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-50 flex items-start justify-center bg-k-black-24 pt-[14vh]"
+          className="fixed inset-0 z-50 flex items-start justify-center bg-k-scrim-24 pt-[14vh]"
         >
           <div
             role="dialog"

@@ -78,7 +78,7 @@ export function DialogShell({
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-k-black-24 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-k-scrim-24 px-4"
     >
       <div
         role="dialog"

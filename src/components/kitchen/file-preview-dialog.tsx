@@ -54,7 +54,7 @@ export function FilePreviewDialog({
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-k-black-56 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-k-scrim-56 p-6"
     >
       <div
         role="dialog"

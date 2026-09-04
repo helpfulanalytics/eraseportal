@@ -440,7 +440,7 @@ export function Composer({
             <button
               type="button"
               onClick={recorder.stop}
-              className="flex h-7 items-center gap-1.5 rounded-md bg-k-black-84 px-2.5 text-k-white text-sm"
+              className="flex h-7 items-center gap-1.5 rounded-md bg-k-solid-dark px-2.5 text-k-white text-sm"
             >
               <SquareIcon className="size-3" strokeWidth={2} fill="currentColor" />
               Stop

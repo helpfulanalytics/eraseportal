@@ -8,6 +8,7 @@
  * auth-actions rather than calling either one directly.
  */
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
 import { useCurrentUser } from "@/components/workspace-provider";
 import {
@@ -16,6 +17,8 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -26,6 +29,7 @@ import { registerDeviceTokenAction } from "@/app/(workspace)/actions";
 export function UserMenu() {
   const currentUser = useCurrentUser();
   const [pending, setPending] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   if (!currentUser) return null;
 
@@ -92,6 +96,19 @@ export function UserMenu() {
           <DropdownMenuItem disabled={requestingNotification} onClick={onEnableNotifications}>
             {requestingNotification ? "Enabling..." : "Enable Notifications"}
           </DropdownMenuItem>
+        </DropdownMenuGroup>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="font-normal text-k-black-40 text-xs">
+            Appearance
+          </DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />

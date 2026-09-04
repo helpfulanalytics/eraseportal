@@ -147,11 +147,11 @@ export function CreateFolderDialog({
 
         {parentFolder ? null : organizations.length > 0 ? (
           <div>
-            <FieldLabel>Organization</FieldLabel>
+            <FieldLabel>Project</FieldLabel>
             <select
               value={organizationId}
               disabled={pending}
-              aria-label="Organization"
+              aria-label="Project"
               onChange={(e) => setOrganizationId(e.target.value)}
               className={`${dialogFieldClass} bg-background`}
             >

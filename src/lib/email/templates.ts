@@ -141,7 +141,7 @@ export function buildInviteEmail(input: InviteInput): EmailDraft {
         "Setting a password takes about a minute, and you won't have to do it again.",
       ],
       facts: facts([
-        { label: isMember ? "Workspace" : "Organization", value: input.destinationName },
+        { label: isMember ? "Workspace" : "Project", value: input.destinationName },
         inviter ? { label: "Invited by", value: inviter } : null,
         { label: "Your role", value: isMember ? "Team member" : "Client" },
         { label: "Sign in as", value: input.to },

@@ -83,7 +83,7 @@ export function NewProjectForm() {
         <div className="border-k-black-06 border-b px-6 py-6 md:px-8">
           <h1 className="font-semibold text-k-black-84 text-title">New project</h1>
           <p className="mt-1 text-k-black-40 text-md">
-            Creates an organization and its first workspace folder. You can add clients
+            Creates a project and its first workspace folder. You can add clients
             and more folders after.
           </p>
         </div>
@@ -91,7 +91,7 @@ export function NewProjectForm() {
         <FieldRow
           label="Title"
           htmlFor="project-name"
-          caption="The organization's name — also becomes the first folder's name."
+          caption="The project's name — also becomes the first folder's name."
         >
           <input
             id="project-name"

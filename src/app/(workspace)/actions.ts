@@ -36,6 +36,7 @@ import {
   deleteFolder,
   deleteFolderFile,
   deleteMessage,
+  deleteOrganization,
   editMessage,
   getBoard,
   getConversation,
@@ -139,7 +140,7 @@ async function requireAdmin() {
 async function requireOrgAdmin() {
   const me = await requireAdmin();
   if (!canManageOrganizations(me)) {
-    throw new Error("You don't have permission to manage organizations.");
+    throw new Error("You don't have permission to manage projects.");
   }
   return me;
 }
@@ -842,8 +843,8 @@ export async function createOrganizationAction(
 
   const trimmedName = name.trim();
   const trimmedDomain = domain.trim();
-  if (!trimmedName) throw new Error("An organization needs a name.");
-  if (!trimmedDomain) throw new Error("An organization needs a domain.");
+  if (!trimmedName) throw new Error("A project needs a name.");
+  if (!trimmedDomain) throw new Error("A project needs a domain.");
 
   const organization = await createOrganization({
     name: trimmedName,
@@ -859,7 +860,7 @@ export async function renameOrganizationAction(
 ): Promise<void> {
   await requireOrgAdmin();
   const trimmed = name.trim();
-  if (!trimmed) throw new Error("An organization needs a name.");
+  if (!trimmed) throw new Error("A project needs a name.");
 
   await renameOrganization(organizationId, trimmed);
   revalidatePath("/w/[orgSlug]", "layout");
@@ -879,6 +880,12 @@ export async function setOrganizationDefaultClientAccessAction(
 
   await setOrganizationDefaultClientAccess(organizationId, level);
   revalidatePath("/w/[orgSlug]/settings", "page");
+}
+
+export async function deleteOrganizationAction(organizationId: string): Promise<void> {
+  await requireOrgAdmin();
+  await deleteOrganization(organizationId);
+  revalidatePath("/");
 }
 
 /* ---- folder contents -------------------------------------------------- */
@@ -1135,7 +1142,7 @@ export async function acceptInviteAction(
     ? await getOrganization(invite.organizationId)
     : undefined;
   if (invite.organizationId && !organization) {
-    throw new Error("That organization no longer exists.");
+    throw new Error("That project no longer exists.");
   }
 
   const destination = organization ? `/w/${organization.slug}` : "/";

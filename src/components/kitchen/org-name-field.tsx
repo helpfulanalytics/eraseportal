@@ -32,7 +32,7 @@ export function OrgNameField({
         window.setTimeout(() => setSaved(false), 2000);
       } catch {
         setValue(initial);
-        setError("Couldn't rename the organization.");
+        setError("Couldn't rename the project.");
       }
     });
   };
@@ -42,7 +42,7 @@ export function OrgNameField({
       <input
         value={value}
         disabled={pending}
-        aria-label="Organization name"
+        aria-label="Project name"
         onChange={(e) => setValue(e.target.value)}
         onBlur={save}
         onKeyDown={(e) => {

@@ -35,7 +35,7 @@ export default async function TeamPage() {
         <div className="flex items-center justify-between">
           <p className="text-k-black-40 text-md">
             Everyone at {workspace.name}. Clients live under each
-            organization&apos;s settings.
+            project&apos;s settings.
           </p>
           <InviteMemberButton canInviteAdmins={memberRoleOf(me) === "owner"} />
         </div>

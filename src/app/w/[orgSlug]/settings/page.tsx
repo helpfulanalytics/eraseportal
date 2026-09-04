@@ -90,11 +90,11 @@ function General({
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <Field label="Organization name" hint="Shown in the sidebar and on shared links.">
+      <Field label="Project name" hint="Shown in the sidebar and on shared links.">
         <OrgNameField organizationId={organizationId} initial={name} />
       </Field>
 
-      <Field label="Portal link" hint="Where this organization's workspace lives.">
+      <Field label="Portal link" hint="Where this project's workspace lives.">
         <PortalLinkField path={`/w/${orgSlug}`} />
       </Field>
 
@@ -118,7 +118,7 @@ async function Clients({ organizationId }: { organizationId: string }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-k-black-40 text-md">
-          Everyone at this organization who can sign into the portal.
+          Everyone at this project who can sign into the portal.
         </p>
         <NewOrgClientButton organizationId={organizationId} />
       </div>

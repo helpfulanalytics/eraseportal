@@ -119,6 +119,6 @@ export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
 
 export const MEMBER_ROLE_HINTS: Record<MemberRole, string> = {
   owner: "Full control, including who else is an owner.",
-  admin: "Manages the team and creates organizations.",
-  member: "Works in organizations and invites clients.",
+  admin: "Manages the team and creates projects.",
+  member: "Works in projects and invites clients.",
 };

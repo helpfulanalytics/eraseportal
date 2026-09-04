@@ -897,6 +897,34 @@ export async function setOrganizationDefaultClientAccess(
 }
 
 /**
+ * Deletes an organization only if it's empty — same non-cascading rule as
+ * `deleteFolder` below, for the same reason: an org's folders each carry
+ * their own five-collection tree, and its clients are Person records other
+ * things (messages, tasks, board cards) can reference by id. "Empty it
+ * first" is what keeps deletion honest here too.
+ */
+export async function deleteOrganization(organizationId: string): Promise<void> {
+  const [folders, clients] = await Promise.all([
+    getFolders({ organizationId }),
+    getClients(),
+  ]);
+  const orgClients = clients.filter((c) => c.organizationId === organizationId);
+
+  if (folders.length > 0) {
+    throw new Error(
+      `This project still has ${folders.length} folder(s) in it. Delete them first.`,
+    );
+  }
+  if (orgClients.length > 0) {
+    throw new Error(
+      `This project still has ${orgClients.length} client(s) in it. Remove them first.`,
+    );
+  }
+
+  await adminDb().collection(COLLECTIONS.organizations).doc(organizationId).delete();
+}
+
+/**
  * Deletes a folder only if it's empty. A folder's contents span five
  * collections (conversations, boards, documents, embeds, files) each with
  * their own nested state — messages under a conversation, cards under a

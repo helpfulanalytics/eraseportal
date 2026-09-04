@@ -21,17 +21,30 @@ export interface DashboardCardItem {
   /** e.g. "Updated 3h ago" — absent for a project with no activity yet. */
   activityLabel?: string;
   color?: string;
+  /** Set only for a project (organization) card — gives it the manage menu. */
+  orgId?: string;
 }
 
 export function DashboardProjectGrid({
   isAdmin,
-  items,
+  items: initialItems,
 }: {
   isAdmin: boolean;
   items: DashboardCardItem[];
 }) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Local, optimistic copy so a delete can remove a card without waiting on
+  // the server round trip + revalidatePath — same reset-on-prop-change shape
+  // `BoardColumns` uses, a conditional setState in the render body rather
+  // than an effect.
+  const [items, setItems] = useState(initialItems);
+  const [reconciledItems, setReconciledItems] = useState(initialItems);
+  if (initialItems !== reconciledItems) {
+    setReconciledItems(initialItems);
+    setItems(initialItems);
+  }
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -97,7 +110,7 @@ export function DashboardProjectGrid({
           </h2>
           <p className="max-w-sm text-k-black-40 text-md">
             {isAdmin
-              ? "Set up an organization and its first folder to get a client started."
+              ? "Set up a project and its first folder to get a client started."
               : "Check back once your agency sets up your workspace."}
           </p>
           {isAdmin ? (
@@ -134,6 +147,10 @@ export function DashboardProjectGrid({
               meta={item.meta}
               activityLabel={item.activityLabel}
               color={item.color}
+              orgId={item.orgId}
+              onDeleted={() =>
+                setItems((current) => current.filter((i) => i.id !== item.id))
+              }
             />
           ))}
         </div>

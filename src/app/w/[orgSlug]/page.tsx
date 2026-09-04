@@ -96,7 +96,7 @@ export default async function OrgWorkspaceHomePage({
       </div>
       <p className="mt-1 text-k-black-40 text-md">{organization.domain}</p>
       <Link href="/" className="mt-2 inline-block text-k-blue text-md">
-        ← All organizations
+        ← All projects
       </Link>
 
       <section className="mt-10">

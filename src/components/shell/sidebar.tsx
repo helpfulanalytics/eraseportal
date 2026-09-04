@@ -206,7 +206,7 @@ function OrgSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger className="flex min-w-0 flex-1 items-center gap-1 rounded-md py-0.5 pr-1 text-left transition-colors hover:bg-k-black-04">
         <h2 className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-section">
-          {current?.name ?? "Select organization"}
+          {current?.name ?? "Select project"}
         </h2>
         <ChevronsUpDownIcon
           className="size-3.5 shrink-0 text-k-black-24"

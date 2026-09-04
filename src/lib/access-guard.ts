@@ -188,7 +188,7 @@ export async function assertGrantablePerson(
   if (person.deactivatedAt) throw new Error("That person has been removed.");
   if (person.kind === "member") return;
   if (!organizationId || person.organizationId !== organizationId) {
-    throw new Error("That person isn't part of this organization.");
+    throw new Error("That person isn't part of this project.");
   }
 }
 

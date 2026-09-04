@@ -86,6 +86,7 @@ export default async function WorkspaceHomePage() {
           activityLabel: lastActivityAt
             ? `Updated ${formatRelativeTime(lastActivityAt)}`
             : undefined,
+          orgId: org.id,
         };
       })
     : // A client only reaches this branch if they somehow have no

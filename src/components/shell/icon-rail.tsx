@@ -70,7 +70,14 @@ export function IconRail({
       href: orgHome,
       icon: HomeGlyph,
       label: "Home",
-      match: (p) => p === orgHome || p.startsWith(`${orgHome}/folders`) || p.startsWith(`${orgHome}/conversations`),
+      // Exact match only, like every other rail entry (Tasks, Settings)
+      // below. It used to stay lit for any folder or conversation page too,
+      // so it never visibly turned off while browsing — the one signal that
+      // could show "you've left home" never fired, which is what made
+      // clicking Home not feel like arriving anywhere. The sidebar tree
+      // already shows exactly which folder/conversation is open; the rail
+      // doesn't need to duplicate that.
+      match: (p) => p === orgHome,
     },
     {
       key: "tasks",

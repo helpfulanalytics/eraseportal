@@ -43,6 +43,7 @@ import { reorderFolderItemsAction } from "@/app/(workspace)/actions";
 import { useTransition } from "react";
 
 import { CreateMenu } from "@/components/kitchen/create-menu";
+import { UnreadBadge } from "@/components/kitchen/unread-badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -375,7 +376,8 @@ function CollapsibleFolder({
                         style={item.color ? { color: item.color } : undefined}
                         strokeWidth={1.6}
                       />
-                      <span className="truncate">{item.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                      <UnreadBadge count={item.unreadCount} />
                     </SidebarRow>
                   </SortableSidebarItem>
                 );

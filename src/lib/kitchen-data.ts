@@ -584,6 +584,119 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
   );
 }
 
+/* ---- unread badges ---------------------------------------------------- */
+
+/**
+ * A board has no separate "activity" collection — cards and comments are
+ * embedded right on the document — so this counts in memory rather than
+ * querying: anything someone *else* added since the viewer's last visit,
+ * new cards and new comments both. `lastReadAt` absent (never opened) reads
+ * as "" — everything on the board counts, the same all-unread-on-first-look
+ * a fresh Slack channel gets. ISO strings compare correctly with `>`, so no
+ * `Date.parse` round trip is needed.
+ */
+function countBoardUnread(board: Board, viewerId: string): number {
+  const lastRead = board.lastReadAt?.[viewerId] ?? "";
+  let count = 0;
+  for (const column of board.columns) {
+    for (const card of column.cards) {
+      if (card.authorId !== viewerId && card.createdAt && card.createdAt > lastRead) {
+        count++;
+      }
+      for (const comment of card.comments ?? []) {
+        if (comment.authorId !== viewerId && comment.createdAt > lastRead) {
+          count++;
+        }
+      }
+    }
+  }
+  return count;
+}
+
+/** Same idea as `countBoardUnread`, but messages are their own collection. */
+async function countConversationUnread(
+  conversation: Conversation,
+  viewerId: string,
+): Promise<number> {
+  const lastRead = conversation.lastReadAt?.[viewerId] ?? "";
+  const messages = await getMessages(conversation.id);
+  return messages.filter(
+    (m) => m.authorId !== viewerId && !m.deletedAt && m.createdAt > lastRead,
+  ).length;
+}
+
+/** Per-item unread counts for every board/conversation in one folder, keyed by item id. */
+export async function getFolderUnreadCounts(
+  folderId: string,
+  viewerId: string,
+): Promise<Record<string, number>> {
+  const [boards, conversations] = await Promise.all([
+    getBoardsInFolder(folderId),
+    getConversationsInFolder(folderId),
+  ]);
+  const entries = await Promise.all([
+    ...boards.map((b) => Promise.resolve([b.id, countBoardUnread(b, viewerId)] as const)),
+    ...conversations.map(
+      async (c) => [c.id, await countConversationUnread(c, viewerId)] as const,
+    ),
+  ]);
+  return Object.fromEntries(entries);
+}
+
+/**
+ * Total unread count per organization, for the dashboard's project cards —
+ * summed across every board and conversation in every one of that org's
+ * folders. Reads every folder in the workspace in one query rather than one
+ * `getFolders({organizationId})` per org, since the dashboard needs every
+ * org's total at once.
+ *
+ * This is the same "fetch everything, scope in memory" trade `getLibraryFiles`
+ * and `getRecentMessages` already make; the first thing to denormalise if a
+ * workspace's board/conversation count ever makes this slow.
+ */
+export async function getOrganizationsUnreadCounts(
+  viewerId: string,
+): Promise<Record<string, number>> {
+  const folders = await getFolders();
+  const perFolder = await Promise.all(
+    folders.map(async (folder) => {
+      const counts = await getFolderUnreadCounts(folder.id, viewerId);
+      const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+      return { organizationId: folder.organizationId, total };
+    }),
+  );
+
+  const totals: Record<string, number> = {};
+  for (const { organizationId, total } of perFolder) {
+    if (!organizationId) continue;
+    totals[organizationId] = (totals[organizationId] ?? 0) + total;
+  }
+  return totals;
+}
+
+export async function markBoardRead(boardId: string, personId: string): Promise<void> {
+  const ref = adminDb().collection(COLLECTIONS.boards).doc(boardId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) return;
+  const current = (snapshot.data()?.lastReadAt ?? {}) as Record<string, string>;
+  await ref.update({
+    lastReadAt: { ...current, [personId]: new Date().toISOString() },
+  });
+}
+
+export async function markConversationRead(
+  conversationId: string,
+  personId: string,
+): Promise<void> {
+  const ref = adminDb().collection(COLLECTIONS.conversations).doc(conversationId);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) return;
+  const current = (snapshot.data()?.lastReadAt ?? {}) as Record<string, string>;
+  await ref.update({
+    lastReadAt: { ...current, [personId]: new Date().toISOString() },
+  });
+}
+
 /**
  * The sidebar's folder tree, fetched once in the workspace layout and passed
  * down. One query per folder for its conversations — acceptable because the
@@ -596,6 +709,7 @@ export async function getLibraryFiles(): Promise<LibraryFile[]> {
  * their parent's page, not from the flat sidebar tree.
  */
 export async function getNavTree(opts?: { organizationId?: string }): Promise<NavFolder[]> {
+  const me = await getCurrentUser();
   const folders = opts === undefined
     ? (await getFolders()).filter((f) => !f.parentFolderId)
     : await getFolders({ organizationId: opts.organizationId, parentFolderId: null });
@@ -606,12 +720,25 @@ export async function getNavTree(opts?: { organizationId?: string }): Promise<Na
       // build an href — except a board's colour, which lives only on the
       // board document. That's the one thing worth a follow-up read.
       // Clients aren't FolderItem docs at all — a separate query.
-      const [items, boards, clients] = await Promise.all([
+      const [items, boards, clients, conversations] = await Promise.all([
         getFolderItems(folder.id),
         getBoardsInFolder(folder.id),
         getClientsInFolder(folder.id),
+        getConversationsInFolder(folder.id),
       ]);
       const boardColor = new Map(boards.map((b) => [b.id, b.color]));
+      const unreadByBoard = new Map(
+        boards.map((b) => [b.id, me ? countBoardUnread(b, me.id) : 0]),
+      );
+      const unreadByConversation = new Map(
+        me
+          ? await Promise.all(
+              conversations.map(
+                async (c) => [c.id, await countConversationUnread(c, me.id)] as const,
+              ),
+            )
+          : [],
+      );
 
       return {
         id: folder.id,
@@ -623,6 +750,12 @@ export async function getNavTree(opts?: { organizationId?: string }): Promise<Na
           kind: i.kind,
           meta: i.meta,
           color: i.kind === "board" ? boardColor.get(i.id) : undefined,
+          unreadCount:
+            i.kind === "board"
+              ? unreadByBoard.get(i.id)
+              : i.kind === "conversation"
+                ? unreadByConversation.get(i.id)
+                : undefined,
         })),
         clients: clients.map((c) => ({
           id: c.id,
@@ -851,13 +984,13 @@ function slugify(name: string): string {
 
 export async function createOrganization(input: {
   name: string;
-  domain: string;
+  domain?: string;
 }): Promise<Organization> {
   const doc = adminDb().collection(COLLECTIONS.organizations).doc();
   const organization: Organization = {
     id: doc.id,
     name: input.name,
-    domain: input.domain,
+    ...(input.domain ? { domain: input.domain } : {}),
     createdAt: new Date().toISOString(),
     slug: slugify(input.name),
   };

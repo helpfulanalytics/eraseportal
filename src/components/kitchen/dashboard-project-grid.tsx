@@ -23,6 +23,8 @@ export interface DashboardCardItem {
   color?: string;
   /** Set only for a project (organization) card — gives it the manage menu. */
   orgId?: string;
+  /** Unseen board/conversation activity across everything inside this project. */
+  unreadCount?: number;
 }
 
 export function DashboardProjectGrid({
@@ -148,6 +150,7 @@ export function DashboardProjectGrid({
               activityLabel={item.activityLabel}
               color={item.color}
               orgId={item.orgId}
+              unreadCount={item.unreadCount}
               onDeleted={() =>
                 setItems((current) => current.filter((i) => i.id !== item.id))
               }

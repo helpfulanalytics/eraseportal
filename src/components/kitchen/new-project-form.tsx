@@ -44,7 +44,7 @@ export function NewProjectForm() {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = Boolean(name.trim()) && Boolean(domain.trim());
+  const canSubmit = Boolean(name.trim());
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -53,7 +53,10 @@ export function NewProjectForm() {
 
     startTransition(async () => {
       try {
-        const organization = await createOrganizationAction(name.trim(), domain.trim());
+        const organization = await createOrganizationAction(
+          name.trim(),
+          domain.trim() || undefined,
+        );
         await createFolderAction({
           name: name.trim(),
           description: description.trim() || undefined,
@@ -104,7 +107,7 @@ export function NewProjectForm() {
           />
         </FieldRow>
 
-        <FieldRow label="Domain" htmlFor="project-domain">
+        <FieldRow label="Domain" htmlFor="project-domain" caption="Optional.">
           <input
             id="project-domain"
             value={domain}

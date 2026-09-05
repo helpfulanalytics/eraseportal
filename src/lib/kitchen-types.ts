@@ -290,6 +290,8 @@ export interface Conversation {
   access?: "invited" | "link";
   roles?: ResourceRoles;
   authorId?: string;
+  /** personId -> ISO timestamp of when they last opened this conversation. */
+  lastReadAt?: Record<string, string>;
 }
 
 export type TaskStatus = "todo" | "in_progress" | "done";
@@ -353,6 +355,8 @@ export interface Board {
   access?: "invited" | "link";
   roles?: ResourceRoles;
   authorId?: string;
+  /** personId -> ISO timestamp of when they last opened this board. */
+  lastReadAt?: Record<string, string>;
 }
 
 /**
@@ -494,7 +498,8 @@ export type ClientAccessLevel = "view" | "comment" | "edit";
 export interface Organization {
   id: string;
   name: string;
-  domain: string;
+  /** Optional — shown as a subtitle on the project card and its own page. */
+  domain?: string;
   createdAt: string;
   /** URL path segment for this org's workspace portal — `/w/{slug}`. */
   slug: string;
@@ -640,6 +645,8 @@ export interface NavFolder {
     meta: ItemMeta;
     /** Only set for `kind: "board"` — the board's own colour, not the item's. */
     color?: string;
+    /** Unseen cards/comments (board) or messages (conversation) since the viewer's last visit. */
+    unreadCount?: number;
   }>;
   /**
    * Clients linked to this folder via `Person.folderId`. A separate array

@@ -53,6 +53,8 @@ import {
   getPerson,
   getTasks,
   getWorkspace,
+  markBoardRead,
+  markConversationRead,
   markInviteUsed,
   moveCard,
   removeCardAttachment,
@@ -432,6 +434,33 @@ export async function toggleReactionAction(
   }
 
   return toggleReaction({ messageId, emoji: trimmed, personId: me.id });
+}
+
+/**
+ * Clears the unread badge for one board/conversation — fired from a
+ * `useEffect` on mount, not a button, so opening it is enough (see
+ * `BoardColumns` / `ConversationView`). The badges themselves live on other
+ * pages (dashboard, sidebar, folder list), so this revalidates those rather
+ * than the page that called it.
+ */
+export async function markBoardReadAction(boardId: string): Promise<void> {
+  const me = await requireUser();
+  const board = await getBoard(boardId);
+  if (!board) return;
+  await assertOrgAccess(me, board.folderId);
+  await markBoardRead(boardId, me.id);
+  revalidatePath("/w/[orgSlug]/folders/[folderId]", "page");
+  revalidatePath("/w/[orgSlug]", "layout");
+}
+
+export async function markConversationReadAction(conversationId: string): Promise<void> {
+  const me = await requireUser();
+  const conversation = await getConversation(conversationId);
+  if (!conversation) return;
+  await assertOrgAccess(me, conversation.folderId);
+  await markConversationRead(conversationId, me.id);
+  revalidatePath("/w/[orgSlug]/folders/[folderId]", "page");
+  revalidatePath("/w/[orgSlug]", "layout");
 }
 
 /** Author or admin only — same "author or admin" split as delete below. */
@@ -837,18 +866,17 @@ export async function renameWorkspaceAction(name: string): Promise<void> {
 
 export async function createOrganizationAction(
   name: string,
-  domain: string,
+  domain?: string,
 ): Promise<{ id: string; slug: string }> {
   await requireOrgAdmin();
 
   const trimmedName = name.trim();
-  const trimmedDomain = domain.trim();
+  const trimmedDomain = domain?.trim();
   if (!trimmedName) throw new Error("A project needs a name.");
-  if (!trimmedDomain) throw new Error("A project needs a domain.");
 
   const organization = await createOrganization({
     name: trimmedName,
-    domain: trimmedDomain,
+    ...(trimmedDomain ? { domain: trimmedDomain } : {}),
   });
   revalidatePath("/");
   return { id: organization.id, slug: organization.slug };

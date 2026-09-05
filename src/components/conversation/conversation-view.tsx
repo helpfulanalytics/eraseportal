@@ -6,7 +6,8 @@
  * seed the composer's bar). This is the thin client boundary that holds it —
  * everything else about either component stays exactly as it was.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { markConversationReadAction } from "@/app/(workspace)/actions";
 import { Composer } from "@/components/conversation/composer";
 import { MessageList } from "@/components/conversation/message-list";
 import type { Message } from "@/lib/kitchen-types";
@@ -21,6 +22,13 @@ export function ConversationView({
   messages: Message[];
 }) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+
+  // Clears this conversation's unread badge — opening it is the "seen" signal,
+  // the same as every chat app. Fire-and-forget: nothing on this page reads
+  // the result, and a failed mark just leaves the badge showing next visit.
+  useEffect(() => {
+    markConversationReadAction(conversationId).catch(() => {});
+  }, [conversationId]);
 
   return (
     <>

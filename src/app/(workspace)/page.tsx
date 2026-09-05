@@ -10,7 +10,13 @@ import {
   DashboardProjectGrid,
   type DashboardCardItem,
 } from "@/components/kitchen/dashboard-project-grid";
-import { getClients, getCurrentUser, getFolders, getOrganizations } from "@/lib/kitchen-data";
+import {
+  getClients,
+  getCurrentUser,
+  getFolders,
+  getOrganizations,
+  getOrganizationsUnreadCounts,
+} from "@/lib/kitchen-data";
 import { formatRelativeTime } from "@/lib/kitchen-format";
 
 /**
@@ -51,12 +57,15 @@ export default async function WorkspaceHomePage() {
   const me = await getCurrentUser();
   const isAdmin = me?.kind === "member";
 
-  const [folders, organizations, clients] = await Promise.all([
+  const [folders, organizations, clients, unreadByOrg] = await Promise.all([
     getFolders(
       isAdmin ? undefined : { organizationId: me?.organizationId },
     ),
     isAdmin ? getOrganizations() : Promise.resolve([]),
     isAdmin ? getClients() : Promise.resolve([]),
+    isAdmin && me
+      ? getOrganizationsUnreadCounts(me.id)
+      : Promise.resolve<Record<string, number>>({}),
   ]);
 
   const createActions = isAdmin ? ADMIN_CREATE_ACTIONS : CLIENT_CREATE_ACTIONS;
@@ -87,6 +96,7 @@ export default async function WorkspaceHomePage() {
             ? `Updated ${formatRelativeTime(lastActivityAt)}`
             : undefined,
           orgId: org.id,
+          unreadCount: unreadByOrg[org.id],
         };
       })
     : // A client only reaches this branch if they somehow have no

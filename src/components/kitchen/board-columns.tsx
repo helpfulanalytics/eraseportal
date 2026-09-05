@@ -18,7 +18,7 @@
  * a press-and-release with no real movement passes through as a click. The
  * trade-off is explained where the drag props are wired up on `Card`.
  */
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   closestCorners,
   DndContext,
@@ -50,6 +50,7 @@ import {
   addBoardColumnAction,
   deleteBoardColumnAction,
   deleteCardAction,
+  markBoardReadAction,
   moveCardAction,
   renameBoardColumnAction,
 } from "@/app/(workspace)/actions";
@@ -120,6 +121,12 @@ export function BoardColumns({
     setReconciledColumns(initialColumns);
     setColumns(initialColumns);
   }
+
+  // Clears this board's unread badge — opening it is the "seen" signal.
+  // Fire-and-forget, same as the conversation page's equivalent effect.
+  useEffect(() => {
+    markBoardReadAction(boardId).catch(() => {});
+  }, [boardId]);
 
   const sensors = useSensors(
     // This is what makes the whole card both clickable and draggable: below

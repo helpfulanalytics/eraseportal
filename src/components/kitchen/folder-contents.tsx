@@ -60,6 +60,7 @@ import {
   type PreviewFile,
 } from "@/components/kitchen/file-preview-dialog";
 import { ItemThumb } from "@/components/kitchen/item-thumb";
+import { UnreadBadge } from "@/components/kitchen/unread-badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -87,6 +88,8 @@ export interface FolderRow {
   variant?: "canvas" | "link";
   /** The external URL for embeds. */
   embedUrl?: string;
+  /** Unseen cards/comments (board) or messages (conversation). Absent for every other kind. */
+  unreadCount?: number;
 }
 
 type Age = "any" | "today" | "week" | "month";
@@ -530,6 +533,10 @@ function GridCard({
         busy && "opacity-50",
       )}
     >
+      {row.unreadCount ? (
+        <UnreadBadge count={row.unreadCount} className="absolute top-1.5 left-1.5" />
+      ) : null}
+
       <div className="absolute top-1.5 right-1.5 opacity-0 transition-opacity group-hover/card:opacity-100">
         <RowMenu
           row={row}
@@ -777,6 +784,7 @@ function SortableRowWrapper(props: any) {
             {props.row.subtitle}
           </span>
         </span>
+        <UnreadBadge count={props.row.unreadCount} className="ml-auto" />
       </RowTarget>
 
       <span className="w-[160px] shrink-0 text-k-black-56 text-md">
@@ -826,6 +834,7 @@ function ListRow(props: any) {
             {props.row.subtitle}
           </span>
         </span>
+        <UnreadBadge count={props.row.unreadCount} className="ml-auto" />
       </RowTarget>
 
       <span className="w-[160px] shrink-0 text-k-black-56 text-md">

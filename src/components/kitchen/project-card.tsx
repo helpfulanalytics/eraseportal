@@ -31,6 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UnreadBadge } from "@/components/kitchen/unread-badge";
 import { cn } from "@/lib/utils";
 
 export function ProjectCard({
@@ -41,6 +42,7 @@ export function ProjectCard({
   activityLabel,
   color,
   orgId,
+  unreadCount,
   onDeleted,
 }: {
   href: string;
@@ -59,6 +61,8 @@ export function ProjectCard({
    * `/w/{slug}`, which doubles as the base for the Edit link.
    */
   orgId?: string;
+  /** Unseen board/conversation activity across everything inside this project. */
+  unreadCount?: number;
   /** Removes this card from the dashboard grid once deletion succeeds. */
   onDeleted?: () => void;
 }) {
@@ -136,9 +140,12 @@ export function ProjectCard({
             aria-hidden="true"
           />
           <div className={cn("min-w-0 flex-1", orgId && "pr-7")}>
-            <h3 className="truncate font-medium text-k-black-84 text-md">
-              {displayTitle}
-            </h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate font-medium text-k-black-84 text-md">
+                {displayTitle}
+              </h3>
+              <UnreadBadge count={unreadCount} />
+            </div>
             {subtitle ? (
               <p className="mt-0.5 truncate text-k-black-40 text-sm">{subtitle}</p>
             ) : null}

@@ -20,6 +20,7 @@ import {
   getFolder,
   getFolderItems,
   getFolders,
+  getFolderUnreadCounts,
   getOrganizations,
 } from "@/lib/kitchen-data";
 import {
@@ -64,6 +65,7 @@ function toRow(
   orgSlug: string,
   previews: Record<string, string>,
   embedUrls: Record<string, string>,
+  unreadCounts: Record<string, number>,
 ): FolderRow {
   const row: FolderRow = {
     id: item.id,
@@ -73,6 +75,7 @@ function toRow(
     createdAt: item.createdAt,
     authorId: item.authorId,
     href: itemHref(item, orgSlug),
+    unreadCount: unreadCounts[item.id],
   };
 
   if (item.meta.type === "file") {
@@ -143,6 +146,7 @@ export default async function FolderPage({ params }: PageProps) {
 
   const items = await getFolderItems(folderId);
   const participants = [...new Set(items.map((i) => i.authorId))];
+  const unreadCounts = await getFolderUnreadCounts(folderId, me.id);
 
   // Documents saved before the listing showed a preview have none stored.
   // One batched read fills those in; it costs nothing once each has been
@@ -247,7 +251,7 @@ export default async function FolderPage({ params }: PageProps) {
 
         <FolderContents
           folderId={folderId}
-          rows={items.map((item) => toRow(item, orgSlug, previews, embedUrls))}
+          rows={items.map((item) => toRow(item, orgSlug, previews, embedUrls, unreadCounts))}
           canManage={isAdmin}
           toolbarRight={
             <>

@@ -15,13 +15,18 @@ import { registerUpload } from "@/app/w/[orgSlug]/folders/[folderId]/actions";
 import { uploadFile } from "@/lib/firebase/storage";
 import { blockedUploadReason } from "@/lib/kitchen-format";
 
-export function UploadButton({ folderId }: { folderId: string }) {
+/**
+ * The upload flow itself, shared by the button (file picker) and the
+ * folder's drag-and-drop zone — same sequential-with-progress behaviour,
+ * same notification side effects via `registerUpload`, regardless of which
+ * one a file came in through.
+ */
+export function useFolderUpload(folderId: string) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const onFiles = async (files: FileList) => {
+  const uploadFiles = async (files: FileList | File[]) => {
     const list = Array.from(files);
     setError(null);
 
@@ -65,12 +70,14 @@ export function UploadButton({ folderId }: { folderId: string }) {
     // The folder list is server-rendered, so it only picks up the new rows
     // once the route re-runs.
     router.refresh();
-
-    // Allows re-selecting the same file after a failure.
-    if (inputRef.current) inputRef.current.value = "";
   };
 
-  const busy = status !== null;
+  return { status, error, uploadFiles, busy: status !== null };
+}
+
+export function UploadButton({ folderId }: { folderId: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { status, error, uploadFiles, busy } = useFolderUpload(folderId);
 
   return (
     <>
@@ -80,7 +87,9 @@ export function UploadButton({ folderId }: { folderId: string }) {
         multiple
         className="hidden"
         onChange={(e) => {
-          if (e.target.files?.length) void onFiles(e.target.files);
+          if (e.target.files?.length) void uploadFiles(e.target.files);
+          // Allows re-selecting the same file after a failure.
+          if (inputRef.current) inputRef.current.value = "";
         }}
       />
 

@@ -61,6 +61,7 @@ import {
 } from "@/components/kitchen/file-preview-dialog";
 import { ItemThumb } from "@/components/kitchen/item-thumb";
 import { UnreadBadge } from "@/components/kitchen/unread-badge";
+import { useFolderUpload } from "@/components/kitchen/upload-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -116,7 +117,8 @@ export function FolderContents({
 }) {
   const router = useRouter();
   const people = usePeople();
-
+  const { uploadFiles, status: uploadStatus, error: uploadError } = useFolderUpload(folderId);
+  const [dragDepth, setDragDepth] = useState(0);
 
   const [rows, setRows] = useState(initialRows);
   useEffect(() => {
@@ -242,8 +244,54 @@ export function FolderContents({
 
   const filtered = query.trim() !== "" || author !== null || age !== "any";
 
+  // Dragging a file in from the OS — separate from dnd-kit's row reordering
+  // above, which uses pointer capture rather than the native HTML5 drag
+  // events these read, so the two never see each other's drags. Only admins
+  // get this: same gate as the Upload button itself, which this reuses.
+  // A depth counter, not a boolean, because dragenter/dragleave fire on every
+  // child element crossed while dragging over — a plain toggle would flicker
+  // the overlay off the moment the pointer passes over a row.
+  const canDrop = canManage;
+  const isFileDrag = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!canDrop || !isFileDrag(e)) return;
+    e.preventDefault();
+    setDragDepth((d) => d + 1);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!canDrop || !isFileDrag(e)) return;
+    e.preventDefault();
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!canDrop || !isFileDrag(e)) return;
+    setDragDepth((d) => Math.max(0, d - 1));
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!canDrop || !isFileDrag(e)) return;
+    e.preventDefault();
+    setDragDepth(0);
+    if (e.dataTransfer.files.length) void uploadFiles(e.dataTransfer.files);
+  };
+
   return (
-    <>
+    <div
+      className="relative"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {canDrop && dragDepth > 0 ? (
+        <div className="pointer-events-none absolute inset-0 z-30 rounded-xl border-2 border-k-blue border-dashed bg-k-blue-06">
+          {/* `sticky` rather than centered in the flow: the drop target spans
+              the whole (possibly long) item list, and centering in that full
+              height can park the label below the fold. */}
+          <p className="sticky top-1/2 mx-auto w-fit -translate-y-1/2 rounded-lg bg-background px-4 py-2 font-medium text-k-blue text-md shadow-popover">
+            Drop to upload
+          </p>
+        </div>
+      ) : null}
+
       <div className="mt-7 flex flex-wrap items-center gap-2">
         <div className="flex h-8 w-60 items-center gap-2 rounded-lg border border-k-black-08 px-3 focus-within:border-k-blue">
           <SearchIcon className="size-3.5 shrink-0 text-k-gray-ad" strokeWidth={1.7} />
@@ -306,6 +354,15 @@ export function FolderContents({
 
         <div className="ml-auto flex items-center gap-2">{toolbarRight}</div>
       </div>
+
+      {uploadStatus || uploadError ? (
+        <p
+          role={uploadError ? "alert" : undefined}
+          className={cn("mt-2 text-md", uploadError ? "text-k-red" : "text-k-black-40")}
+        >
+          {uploadError ?? uploadStatus}
+        </p>
+      ) : null}
 
       <div className="mt-7 w-full">
         <div className="flex items-center gap-4 border-k-black-06 border-b px-3 pb-2">
@@ -380,7 +437,7 @@ export function FolderContents({
       {preview ? (
         <FilePreviewDialog file={preview} onClose={() => setPreview(null)} />
       ) : null}
-    </>
+    </div>
   );
 }
 

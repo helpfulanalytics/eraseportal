@@ -53,6 +53,7 @@ import {
 import {
   useCurrentUser,
   useOrgSlug,
+  useUnreadOverride,
   useWorkspace,
 } from "@/components/workspace-provider";
 import type { NavFolder, Organization } from "@/lib/kitchen-types";
@@ -280,6 +281,7 @@ function CollapsibleFolder({
   pathname: string;
 }) {
   const [folder, setFolder] = useState(initialFolder);
+  const { isUnreadCleared } = useUnreadOverride();
   const [, startTransition] = useTransition();
 
   const sensors = useSensors(
@@ -377,7 +379,9 @@ function CollapsibleFolder({
                         strokeWidth={1.6}
                       />
                       <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                      <UnreadBadge count={item.unreadCount} />
+                      <UnreadBadge
+                        count={isUnreadCleared(item.id) ? 0 : item.unreadCount}
+                      />
                     </SidebarRow>
                   </SortableSidebarItem>
                 );

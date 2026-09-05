@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { markConversationReadAction } from "@/app/(workspace)/actions";
 import { Composer } from "@/components/conversation/composer";
 import { MessageList } from "@/components/conversation/message-list";
+import { useUnreadOverride } from "@/components/workspace-provider";
 import type { Message } from "@/lib/kitchen-types";
 
 export function ConversationView({
@@ -22,13 +23,17 @@ export function ConversationView({
   messages: Message[];
 }) {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const { clearUnread } = useUnreadOverride();
 
-  // Clears this conversation's unread badge — opening it is the "seen" signal,
-  // the same as every chat app. Fire-and-forget: nothing on this page reads
-  // the result, and a failed mark just leaves the badge showing next visit.
+  // Clears this conversation's unread badge — opening it is the "seen"
+  // signal, the same as every chat app. `clearUnread` zeroes the sidebar
+  // badge immediately (no network wait); `markConversationReadAction`
+  // persists `lastReadAt` in the background so it stays cleared next visit
+  // too, fire-and-forget since nothing here depends on it finishing.
   useEffect(() => {
+    clearUnread(conversationId);
     markConversationReadAction(conversationId).catch(() => {});
-  }, [conversationId]);
+  }, [conversationId, clearUnread]);
 
   return (
     <>

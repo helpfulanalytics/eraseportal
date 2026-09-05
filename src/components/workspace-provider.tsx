@@ -13,7 +13,7 @@
  * It holds no fetching logic on purpose. The server layout does the reading;
  * this is a transport.
  */
-import { createContext, use, useEffect, type ReactNode } from "react";
+import { createContext, use, useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Person, Workspace } from "@/lib/kitchen-types";
 import { setupForegroundMessaging } from "@/lib/firebase/messaging";
 
@@ -34,6 +34,22 @@ interface WorkspaceContextValue {
    * (`hrefFor` in sidebar.tsx, create-dialog redirects) prefix with this.
    */
   orgSlug?: string | null;
+  /**
+   * Board/conversation ids marked read this session, ahead of the server
+   * round trip — see `clearUnread`. Kept in context rather than local to the
+   * sidebar because the thing clearing it (a board or conversation page) and
+   * the thing showing it (the sidebar) are siblings under `AppShell`, not
+   * parent/child.
+   */
+  clearedUnreadIds: Set<string>;
+  /**
+   * Zeroes a sidebar unread badge immediately, without waiting on
+   * `markBoardReadAction`/`markConversationReadAction`'s network round trip
+   * (which still runs, persisting `lastReadAt` for future visits) — the
+   * badge otherwise sits there for the second or so that request takes,
+   * which reads as broken when the board/conversation is already open.
+   */
+  clearUnread: (id: string) => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -44,7 +60,12 @@ export function WorkspaceProvider({
   currentUser,
   orgSlug = null,
   children,
-}: WorkspaceContextValue & { children: ReactNode }) {
+}: Omit<WorkspaceContextValue, "clearedUnreadIds" | "clearUnread"> & { children: ReactNode }) {
+  const [clearedUnreadIds, setClearedUnreadIds] = useState<Set<string>>(new Set());
+  const clearUnread = useCallback((id: string) => {
+    setClearedUnreadIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  }, []);
+
   useEffect(() => {
     // Attempt to set up foreground messaging if permission is granted.
     // It returns an unsubscribe function that we can return for cleanup.
@@ -63,7 +84,7 @@ export function WorkspaceProvider({
 
   return (
     <WorkspaceContext
-      value={{ workspace, people, currentUser, orgSlug }}
+      value={{ workspace, people, currentUser, orgSlug, clearedUnreadIds, clearUnread }}
     >
       {children}
     </WorkspaceContext>
@@ -101,4 +122,20 @@ export function useCurrentUser(): Person | null {
 
 export function useOrgSlug(): string | null {
   return useWorkspaceContext().orgSlug ?? null;
+}
+
+/**
+ * `isUnreadCleared(id)` — true once `clearUnread(id)` has been called this
+ * session, for a sidebar row to zero its own badge immediately. See
+ * `clearUnread`'s doc comment on `WorkspaceContextValue`.
+ */
+export function useUnreadOverride(): {
+  isUnreadCleared: (id: string) => boolean;
+  clearUnread: (id: string) => void;
+} {
+  const { clearedUnreadIds, clearUnread } = useWorkspaceContext();
+  return {
+    isUnreadCleared: (id: string) => clearedUnreadIds.has(id),
+    clearUnread,
+  };
 }

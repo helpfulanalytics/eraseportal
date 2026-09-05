@@ -56,6 +56,7 @@ import {
 } from "@/app/(workspace)/actions";
 import { CardDialog } from "@/components/kitchen/card-dialog";
 import { PersonAvatar } from "@/components/kitchen/person-avatar";
+import { useUnreadOverride } from "@/components/workspace-provider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -116,6 +117,7 @@ export function BoardColumns({
   const [activeCard, setActiveCard] = useState<BoardCard | null>(null);
   const [, startTransition] = useTransition();
   const dragStartSnapshot = useRef<BoardColumn[] | null>(null);
+  const { clearUnread } = useUnreadOverride();
 
   if (initialColumns !== reconciledColumns && !activeCard) {
     setReconciledColumns(initialColumns);
@@ -123,10 +125,14 @@ export function BoardColumns({
   }
 
   // Clears this board's unread badge — opening it is the "seen" signal.
-  // Fire-and-forget, same as the conversation page's equivalent effect.
+  // `clearUnread` zeroes the sidebar badge immediately (no network wait);
+  // `markBoardReadAction` persists `lastReadAt` in the background so the
+  // badge stays cleared on the next visit too, fire-and-forget since nothing
+  // here depends on it finishing.
   useEffect(() => {
+    clearUnread(boardId);
     markBoardReadAction(boardId).catch(() => {});
-  }, [boardId]);
+  }, [boardId, clearUnread]);
 
   const sensors = useSensors(
     // This is what makes the whole card both clickable and draggable: below

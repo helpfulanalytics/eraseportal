@@ -613,29 +613,64 @@ function countBoardUnread(board: Board, viewerId: string): number {
   return count;
 }
 
+/** One badge's worth of info — a plain count, plus whether any of it is a mention. */
+export interface UnreadInfo {
+  count: number;
+  /** True when at least one unread message mentions the viewer. Boards are always false — see `messageMentions`. */
+  hasMention: boolean;
+}
+
+const EMPTY_UNREAD: UnreadInfo = { count: 0, hasMention: false };
+
+/**
+ * Whether `body` mentions `personId` anywhere. Walks both block shapes that
+ * carry `Inline[]` — a paragraph's `children` and a list's per-item
+ * `children` — since a mention can sit in either.
+ */
+function messageMentions(body: Message["body"], personId: string): boolean {
+  return body.some((block) => {
+    if (block.b === "p") {
+      return block.children.some((i) => i.t === "mention" && i.personId === personId);
+    }
+    if (block.b === "ul") {
+      return block.items.some((item) =>
+        item.children.some((i) => i.t === "mention" && i.personId === personId),
+      );
+    }
+    return false;
+  });
+}
+
 /** Same idea as `countBoardUnread`, but messages are their own collection. */
 async function countConversationUnread(
   conversation: Conversation,
   viewerId: string,
-): Promise<number> {
+): Promise<UnreadInfo> {
   const lastRead = conversation.lastReadAt?.[viewerId] ?? "";
   const messages = await getMessages(conversation.id);
-  return messages.filter(
+  const unread = messages.filter(
     (m) => m.authorId !== viewerId && !m.deletedAt && m.createdAt > lastRead,
-  ).length;
+  );
+  return {
+    count: unread.length,
+    hasMention: unread.some((m) => messageMentions(m.body, viewerId)),
+  };
 }
 
-/** Per-item unread counts for every board/conversation in one folder, keyed by item id. */
+/** Per-item unread info for every board/conversation in one folder, keyed by item id. */
 export async function getFolderUnreadCounts(
   folderId: string,
   viewerId: string,
-): Promise<Record<string, number>> {
+): Promise<Record<string, UnreadInfo>> {
   const [boards, conversations] = await Promise.all([
     getBoardsInFolder(folderId),
     getConversationsInFolder(folderId),
   ]);
   const entries = await Promise.all([
-    ...boards.map((b) => Promise.resolve([b.id, countBoardUnread(b, viewerId)] as const)),
+    // Boards never carry a mention — card/comment text has no mention support.
+    ...boards.map((b) =>
+      Promise.resolve([b.id, { count: countBoardUnread(b, viewerId), hasMention: false }] as const),
+    ),
     ...conversations.map(
       async (c) => [c.id, await countConversationUnread(c, viewerId)] as const,
     ),
@@ -644,7 +679,7 @@ export async function getFolderUnreadCounts(
 }
 
 /**
- * Total unread count per organization, for the dashboard's project cards —
+ * Total unread info per organization, for the dashboard's project cards —
  * summed across every board and conversation in every one of that org's
  * folders. Reads every folder in the workspace in one query rather than one
  * `getFolders({organizationId})` per org, since the dashboard needs every
@@ -656,20 +691,28 @@ export async function getFolderUnreadCounts(
  */
 export async function getOrganizationsUnreadCounts(
   viewerId: string,
-): Promise<Record<string, number>> {
+): Promise<Record<string, UnreadInfo>> {
   const folders = await getFolders();
   const perFolder = await Promise.all(
     folders.map(async (folder) => {
       const counts = await getFolderUnreadCounts(folder.id, viewerId);
-      const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
-      return { organizationId: folder.organizationId, total };
+      const values = Object.values(counts);
+      return {
+        organizationId: folder.organizationId,
+        count: values.reduce((sum, v) => sum + v.count, 0),
+        hasMention: values.some((v) => v.hasMention),
+      };
     }),
   );
 
-  const totals: Record<string, number> = {};
-  for (const { organizationId, total } of perFolder) {
+  const totals: Record<string, UnreadInfo> = {};
+  for (const { organizationId, count, hasMention } of perFolder) {
     if (!organizationId) continue;
-    totals[organizationId] = (totals[organizationId] ?? 0) + total;
+    const prev = totals[organizationId] ?? EMPTY_UNREAD;
+    totals[organizationId] = {
+      count: prev.count + count,
+      hasMention: prev.hasMention || hasMention,
+    };
   }
   return totals;
 }
@@ -728,7 +771,7 @@ export async function getNavTree(opts?: { organizationId?: string }): Promise<Na
       ]);
       const boardColor = new Map(boards.map((b) => [b.id, b.color]));
       const unreadByBoard = new Map(
-        boards.map((b) => [b.id, me ? countBoardUnread(b, me.id) : 0]),
+        boards.map((b) => [b.id, me ? { count: countBoardUnread(b, me.id), hasMention: false } : EMPTY_UNREAD]),
       );
       const unreadByConversation = new Map(
         me
@@ -739,24 +782,36 @@ export async function getNavTree(opts?: { organizationId?: string }): Promise<Na
             )
           : [],
       );
+      // Rolled up so a collapsed folder still signals it has unseen activity
+      // inside it — otherwise the count only shows once you expand the folder.
+      const folderUnread = [...unreadByBoard.values(), ...unreadByConversation.values()].reduce(
+        (acc, v) => ({ count: acc.count + v.count, hasMention: acc.hasMention || v.hasMention }),
+        EMPTY_UNREAD,
+      );
 
       return {
         id: folder.id,
         name: folder.name,
         color: folder.color,
-        items: items.map((i) => ({
-          id: i.id,
-          name: i.name,
-          kind: i.kind,
-          meta: i.meta,
-          color: i.kind === "board" ? boardColor.get(i.id) : undefined,
-          unreadCount:
+        unreadCount: folderUnread.count,
+        hasMention: folderUnread.hasMention,
+        items: items.map((i) => {
+          const unread =
             i.kind === "board"
               ? unreadByBoard.get(i.id)
               : i.kind === "conversation"
                 ? unreadByConversation.get(i.id)
-                : undefined,
-        })),
+                : undefined;
+          return {
+            id: i.id,
+            name: i.name,
+            kind: i.kind,
+            meta: i.meta,
+            color: i.kind === "board" ? boardColor.get(i.id) : undefined,
+            unreadCount: unread?.count,
+            hasMention: unread?.hasMention,
+          };
+        }),
         clients: clients.map((c) => ({
           id: c.id,
           name: c.name,

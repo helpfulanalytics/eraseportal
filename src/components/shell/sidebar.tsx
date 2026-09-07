@@ -308,6 +308,20 @@ function CollapsibleFolder({
 
   const href = `/w/${orgSlug}/folders/${folder.id}`;
   const hasChildren = folder.items.length > 0 || folder.clients.length > 0;
+
+  // Derived live from the items themselves (not the server's `folder.unreadCount`)
+  // so it reacts to `clearUnread` immediately, same as each item's own badge —
+  // otherwise a just-cleared item would still count toward a stale folder total.
+  const folderUnread = folder.items.reduce(
+    (acc, item) => {
+      if (isUnreadCleared(item.id)) return acc;
+      return {
+        count: acc.count + (item.unreadCount ?? 0),
+        hasMention: acc.hasMention || Boolean(item.hasMention),
+      };
+    },
+    { count: 0, hasMention: false },
+  );
   
   const [isOpen, setIsOpen] = useState(() => {
     if (pathname === href) return true;
@@ -350,7 +364,8 @@ function CollapsibleFolder({
             }
             strokeWidth={1.5}
           />
-          <span className="truncate">{folder.name}</span>
+          <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+          <UnreadBadge count={folderUnread.count} mention={folderUnread.hasMention} />
         </Link>
       </div>
 
@@ -381,6 +396,7 @@ function CollapsibleFolder({
                       <span className="min-w-0 flex-1 truncate">{item.name}</span>
                       <UnreadBadge
                         count={isUnreadCleared(item.id) ? 0 : item.unreadCount}
+                        mention={!isUnreadCleared(item.id) && item.hasMention}
                       />
                     </SidebarRow>
                   </SortableSidebarItem>

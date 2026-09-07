@@ -638,6 +638,10 @@ export interface NavFolder {
   name: string;
   /** One of `SWATCH_COLORS`. Absent on folders created before this existed. */
   color?: string;
+  /** Rolled up from every item below, so a collapsed folder still shows it has unseen activity. */
+  unreadCount?: number;
+  /** True when any unseen item's `hasMention` is true. */
+  hasMention?: boolean;
   items: Array<{
     id: string;
     name: string;
@@ -647,6 +651,8 @@ export interface NavFolder {
     color?: string;
     /** Unseen cards/comments (board) or messages (conversation) since the viewer's last visit. */
     unreadCount?: number;
+    /** True when an unseen conversation message mentions the viewer. Always false/absent for boards. */
+    hasMention?: boolean;
   }>;
   /**
    * Clients linked to this folder via `Person.folderId`. A separate array

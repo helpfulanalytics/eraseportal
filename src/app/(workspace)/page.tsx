@@ -16,6 +16,7 @@ import {
   getFolders,
   getOrganizations,
   getOrganizationsUnreadCounts,
+  type UnreadInfo,
 } from "@/lib/kitchen-data";
 import { formatRelativeTime } from "@/lib/kitchen-format";
 
@@ -65,7 +66,7 @@ export default async function WorkspaceHomePage() {
     isAdmin ? getClients() : Promise.resolve([]),
     isAdmin && me
       ? getOrganizationsUnreadCounts(me.id)
-      : Promise.resolve<Record<string, number>>({}),
+      : Promise.resolve<Record<string, UnreadInfo>>({}),
   ]);
 
   const createActions = isAdmin ? ADMIN_CREATE_ACTIONS : CLIENT_CREATE_ACTIONS;
@@ -96,7 +97,8 @@ export default async function WorkspaceHomePage() {
             ? `Updated ${formatRelativeTime(lastActivityAt)}`
             : undefined,
           orgId: org.id,
-          unreadCount: unreadByOrg[org.id],
+          unreadCount: unreadByOrg[org.id]?.count,
+          hasMention: unreadByOrg[org.id]?.hasMention,
         };
       })
     : // A client only reaches this branch if they somehow have no

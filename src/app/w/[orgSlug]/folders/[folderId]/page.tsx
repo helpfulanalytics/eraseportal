@@ -22,6 +22,7 @@ import {
   getFolders,
   getFolderUnreadCounts,
   getOrganizations,
+  type UnreadInfo,
 } from "@/lib/kitchen-data";
 import {
   formatBytes,
@@ -65,7 +66,7 @@ function toRow(
   orgSlug: string,
   previews: Record<string, string>,
   embedUrls: Record<string, string>,
-  unreadCounts: Record<string, number>,
+  unreadCounts: Record<string, UnreadInfo>,
 ): FolderRow {
   const row: FolderRow = {
     id: item.id,
@@ -75,7 +76,8 @@ function toRow(
     createdAt: item.createdAt,
     authorId: item.authorId,
     href: itemHref(item, orgSlug),
-    unreadCount: unreadCounts[item.id],
+    unreadCount: unreadCounts[item.id]?.count,
+    hasMention: unreadCounts[item.id]?.hasMention,
   };
 
   if (item.meta.type === "file") {

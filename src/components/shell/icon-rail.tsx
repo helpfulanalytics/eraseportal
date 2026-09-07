@@ -53,11 +53,14 @@ export function IconRail({
   sidebarOpen,
   inboxOpen,
   onToggleInbox,
+  hasUnread,
 }: {
   onToggleSidebar: () => void;
   sidebarOpen: boolean;
   inboxOpen: boolean;
   onToggleInbox: () => void;
+  /** Anything unread anywhere in this org — shown as a dot on Home, since the sidebar tree may be scrolled past or collapsed. */
+  hasUnread?: boolean;
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -111,6 +114,7 @@ export function IconRail({
             icon={item.icon}
             label={item.label}
             active={active}
+            dot={item.key === "home" && hasUnread}
           />
         );
       })}
@@ -178,12 +182,15 @@ function RailButton({
   icon: Icon,
   label,
   active,
+  dot,
   ...props
 }: {
   as?: React.ElementType;
   icon: Glyph;
   label: string;
   active?: boolean;
+  /** A small unread-activity indicator — the rail has no room for a count. */
+  dot?: boolean;
 } & React.ComponentPropsWithoutRef<"button"> &
   Record<string, unknown>) {
   return (
@@ -199,13 +206,19 @@ function RailButton({
     >
       <span
         className={cn(
-          "flex size-9 items-center justify-center rounded-lg transition-colors",
+          "relative flex size-9 items-center justify-center rounded-lg transition-colors",
           active
             ? "bg-k-black-08 text-k-black-84"
             : "text-k-black-56 group-hover:bg-k-black-04 group-hover:text-k-black-84",
         )}
       >
         <Icon className="size-[18px]" strokeWidth={1.6} />
+        {dot ? (
+          <span
+            className="absolute top-1 right-1.5 size-2 rounded-full bg-k-red ring-2 ring-background"
+            aria-hidden="true"
+          />
+        ) : null}
       </span>
       <span
         className={cn(

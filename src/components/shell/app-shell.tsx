@@ -4,9 +4,11 @@ import { useSyncExternalStore } from "react";
 import { GlobalSearch } from "@/components/shell/global-search";
 import { IconRail } from "@/components/shell/icon-rail";
 import { InboxSidebar } from "@/components/shell/inbox-sidebar";
+import { PushPermissionPrompt } from "@/components/shell/push-permission-prompt";
 import { Sidebar } from "@/components/shell/sidebar";
+import { TabTitleBadge } from "@/components/shell/tab-title-badge";
 import { UserMenu } from "@/components/shell/user-menu";
-import { useOrgSlug } from "@/components/workspace-provider";
+import { useOrgSlug, useUnreadOverride } from "@/components/workspace-provider";
 import type { NavFolder, Organization } from "@/lib/kitchen-types";
 
 const SIDEBAR_KEY = "workspace:sidebar-open";
@@ -97,8 +99,21 @@ export function AppShell({
   const showInbox = inboxOpen && Boolean(orgSlug);
   const showFolders = sidebarOpen && !showInbox;
 
+  const { isUnreadCleared } = useUnreadOverride();
+  const totalUnread = navFolders.reduce(
+    (sum, folder) =>
+      sum +
+      folder.items.reduce(
+        (folderSum, item) =>
+          folderSum + (isUnreadCleared(item.id) ? 0 : (item.unreadCount ?? 0)),
+        0,
+      ),
+    0,
+  );
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-k-page">
+      <TabTitleBadge count={totalUnread} />
       <header className="relative flex h-[var(--k-topbar-height)] shrink-0 items-center px-3">
         <div className="-translate-x-1/2 absolute left-1/2">
           <GlobalSearch />
@@ -118,6 +133,7 @@ export function AppShell({
           sidebarOpen={showFolders}
           inboxOpen={showInbox}
           onToggleInbox={() => inboxStore.toggle()}
+          hasUnread={totalUnread > 0}
         />
 
         {showInbox && orgSlug ? (
@@ -131,6 +147,8 @@ export function AppShell({
           <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
+
+      <PushPermissionPrompt />
     </div>
   );
 }

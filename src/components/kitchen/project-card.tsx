@@ -43,6 +43,7 @@ export function ProjectCard({
   color,
   orgId,
   unreadCount,
+  hasMention,
   onDeleted,
 }: {
   href: string;
@@ -63,6 +64,8 @@ export function ProjectCard({
   orgId?: string;
   /** Unseen board/conversation activity across everything inside this project. */
   unreadCount?: number;
+  /** True when any of that unseen activity is a mention of the viewer. */
+  hasMention?: boolean;
   /** Removes this card from the dashboard grid once deletion succeeds. */
   onDeleted?: () => void;
 }) {
@@ -144,7 +147,7 @@ export function ProjectCard({
               <h3 className="truncate font-medium text-k-black-84 text-md">
                 {displayTitle}
               </h3>
-              <UnreadBadge count={unreadCount} />
+              <UnreadBadge count={unreadCount} mention={hasMention} />
             </div>
             {subtitle ? (
               <p className="mt-0.5 truncate text-k-black-40 text-sm">{subtitle}</p>

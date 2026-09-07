@@ -51,6 +51,39 @@ import type { GiphyGif } from "@/lib/giphy";
 import type { Attachment, Message, Person } from "@/lib/kitchen-types";
 import { cn } from "@/lib/utils";
 
+/**
+ * Splits a draft into plain/mention runs for the live highlight overlay
+ * (see the `<div className="relative">` wrapper below) — same `@handle`
+ * pattern `parseInline` in kitchen-data.ts uses to build the real message,
+ * checked against the same participant handles, so a token only turns blue
+ * here if it would actually become a mention on send. Returns plain strings
+ * as-is and wraps a recognized handle (including its `@`) in a keyed object
+ * the caller renders as a blue span.
+ */
+function splitMentionRuns(
+  text: string,
+  validHandles: Set<string>,
+): Array<string | { mention: string; key: number }> {
+  const pattern = /@([a-zA-Z0-9_]+)/g;
+  const runs: Array<string | { mention: string; key: number }> = [];
+  let cursor = 0;
+  let key = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    const [full, handle] = match;
+    if (!validHandles.has(handle)) continue;
+    if (start > cursor) runs.push(text.slice(cursor, start));
+    runs.push({ mention: full, key: key++ });
+    cursor = start + full.length;
+  }
+  if (cursor < text.length) runs.push(text.slice(cursor));
+  // A trailing newline needs a trailing space to actually claim a line in a
+  // `white-space: pre-wrap` div, the same way it would in a textarea.
+  if (text.endsWith("\n")) runs.push(" ");
+  return runs;
+}
+
 /** Where in the draft an active `@query` starts, and what's typed after it. */
 interface MentionState {
   start: number;
@@ -94,8 +127,18 @@ export function Composer({
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
 
   const people = usePeople();
+  const validHandles = useMemo(
+    () =>
+      new Set(
+        participantIds
+          .map((id) => people[id]?.handle)
+          .filter((handle): handle is string => Boolean(handle)),
+      ),
+    [participantIds, people],
+  );
   const mentionMatches = useMemo<Person[]>(() => {
     if (!mention) return [];
     const query = mention.query.toLowerCase();
@@ -344,9 +387,37 @@ export function Composer({
         ) : null}
 
         <div className="relative">
+          {/*
+            The textarea's own text is transparent (see its className below)
+            — this div, sitting behind it at the same box metrics, is what's
+            actually visible, so a recognized @handle can render blue while
+            still typing rather than only after the message sends and
+            `InlineRun` gets a real Inline[] to work with. `aria-hidden`
+            since the textarea's value is the real accessible content.
+          */}
+          <div
+            ref={highlightRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden whitespace-pre-wrap break-words px-4 pt-3 pb-1 text-k-black-84 text-md"
+          >
+            {splitMentionRuns(value, validHandles).map((run, i) =>
+              typeof run === "string" ? (
+                <span key={i}>{run}</span>
+              ) : (
+                <span key={run.key} className="rounded bg-k-blue-08 font-medium text-k-blue">
+                  {run.mention}
+                </span>
+              ),
+            )}
+          </div>
           <textarea
             ref={textRef}
             value={value}
+            onScroll={(e) => {
+              if (highlightRef.current) {
+                highlightRef.current.scrollTop = e.currentTarget.scrollTop;
+              }
+            }}
             onChange={(e) => {
               setValue(e.target.value);
               syncMention(e.target.value, e.target.selectionStart);
@@ -399,7 +470,7 @@ export function Composer({
                 ? "Write an internal note — only your team can see this…"
                 : "Write a message or note, or just drag files here..."
             }
-            className="w-full resize-none bg-transparent px-4 pt-3 pb-1 text-k-black-84 text-md outline-none placeholder:text-k-gray-ad"
+            className="relative z-10 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-md text-transparent caret-k-black-84 outline-none placeholder:text-k-gray-ad"
           />
 
           {mention && mentionMatches.length > 0 && textRef.current ? (

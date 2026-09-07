@@ -14,6 +14,7 @@
  * key. `one()` and `many()` put it back.
  */
 import { randomUUID } from "node:crypto";
+import { cache } from "react";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminBucket, adminDb } from "./firebase/admin";
 import { getSessionUser } from "./firebase/session";
@@ -642,15 +643,29 @@ function messageMentions(body: Message["body"], personId: string): boolean {
 }
 
 /** Same idea as `countBoardUnread`, but messages are their own collection. */
+/**
+ * Queries only the messages that could possibly be unread, rather than
+ * `getMessages`'s full history filtered in memory — this runs on every
+ * navigation (`getNavTree`, in the org layout) for every conversation in
+ * scope, and reading a conversation's entire history just to keep 1-2 of
+ * them was the actual cause of navigation feeling slow. The composite index
+ * already declared for `getMessages`'s `conversationId ==, createdAt
+ * orderBy` covers this equality-plus-range shape too, so no new index is
+ * needed.
+ */
 async function countConversationUnread(
   conversation: Conversation,
   viewerId: string,
 ): Promise<UnreadInfo> {
   const lastRead = conversation.lastReadAt?.[viewerId] ?? "";
-  const messages = await getMessages(conversation.id);
-  const unread = messages.filter(
-    (m) => m.authorId !== viewerId && !m.deletedAt && m.createdAt > lastRead,
+  let query = collection(COLLECTIONS.messages).where(
+    "conversationId",
+    "==",
+    conversation.id,
   );
+  if (lastRead) query = query.where("createdAt", ">", lastRead);
+  const messages = await many<Message>(query);
+  const unread = messages.filter((m) => m.authorId !== viewerId && !m.deletedAt);
   return {
     count: unread.length,
     hasMention: unread.some((m) => messageMentions(m.body, viewerId)),
@@ -848,7 +863,14 @@ export async function getBoardsInFolder(folderId: string): Promise<Board[]> {
  * cases and routes an authenticated stranger to `/no-access`, so the dead end
  * is explained rather than silently looping back to sign-in.
  */
-export async function getCurrentUser(): Promise<Person | null> {
+/**
+ * Wrapped in `cache()` for the same reason `getSessionUser` is: this is
+ * called independently from the layout, the page, and half a dozen
+ * data-layer helpers (`getFolders`, `getNavTree`, `requireFolderAccess`, …)
+ * within one render, each paying its own `getSessionUser` + Firestore-lookup
+ * cost if not memoized. Scoped to one request/render, same as above.
+ */
+export const getCurrentUser = cache(async (): Promise<Person | null> => {
   const session = await getSessionUser();
   if (!session) return null;
 
@@ -881,7 +903,7 @@ export async function getCurrentUser(): Promise<Person | null> {
   }
 
   return null;
-}
+});
 
 /** Avatar tints, matching the palette the seeded people use. */
 const PERSON_COLORS = [

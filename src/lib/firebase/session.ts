@@ -12,6 +12,7 @@
  * silently breaks the moment this leaves localhost.
  */
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { adminAuth } from "./admin";
 
 export const SESSION_COOKIE = "__session";
@@ -27,8 +28,17 @@ export interface SessionUser {
 /**
  * The signed-in user, or null. Never throws on a bad cookie — an expired or
  * tampered session should land the visitor on sign-in, not on an error page.
+ *
+ * Wrapped in `cache()`: `verifySessionCookie(..., true)`'s revocation check
+ * is a network round trip to Firebase Auth, and this (directly, or through
+ * `getCurrentUser`) gets called from the layout, the page, and several
+ * data-layer helpers independently within one render — each unaware the
+ * others already asked. Without memoizing, that's several redundant
+ * round trips serialized across a single navigation, which is what made
+ * every page feel slow. `cache()` scopes the memo to one request/render, so
+ * this never leaks a stale session across requests.
  */
-export async function getSessionUser(): Promise<SessionUser | null> {
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const store = await cookies();
   const cookie = store.get(SESSION_COOKIE)?.value;
   if (!cookie) return null;
@@ -41,7 +51,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
-}
+});
 
 /** Exchange a client ID token for a session cookie value. */
 export async function createSessionCookie(idToken: string): Promise<string> {

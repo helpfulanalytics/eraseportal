@@ -97,8 +97,8 @@ export function IconRail({
       className="relative z-30 flex w-rail shrink-0 flex-col items-center gap-1 py-3"
     >
       <Link
-        href={orgHome}
-        aria-label="Workspace home"
+        href="/"
+        aria-label="All projects"
         className="mb-3 flex size-10 items-center justify-center rounded-full text-k-black-84 transition-colors hover:bg-k-black-04"
       >
         <BrandMark size={28} />

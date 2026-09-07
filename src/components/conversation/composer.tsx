@@ -49,6 +49,7 @@ import { uploadFile } from "@/lib/firebase/storage";
 import { blockedUploadReason, blocksToText, formatBytes } from "@/lib/kitchen-format";
 import type { GiphyGif } from "@/lib/giphy";
 import type { Attachment, Message, Person } from "@/lib/kitchen-types";
+import { isActive } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -130,27 +131,33 @@ export function Composer({
   const highlightRef = useRef<HTMLDivElement>(null);
 
   const people = usePeople();
+  // Mentionable: this conversation's actual participants, plus every active
+  // agency member — mirrors `sendMessageAction`'s `handleToId`, which is the
+  // real authority on what becomes a mention. A member works across every
+  // project already, so they should be taggable in one whether or not they
+  // happen to be in its (often creator-only) `participantIds`.
+  const mentionablePeople = useMemo(() => {
+    const ids = new Set([
+      ...participantIds,
+      ...Object.values(people)
+        .filter((p) => p.kind === "member" && isActive(p))
+        .map((p) => p.id),
+    ]);
+    return [...ids].map((id) => people[id]).filter((p): p is Person => Boolean(p));
+  }, [participantIds, people]);
   const validHandles = useMemo(
-    () =>
-      new Set(
-        participantIds
-          .map((id) => people[id]?.handle)
-          .filter((handle): handle is string => Boolean(handle)),
-      ),
-    [participantIds, people],
+    () => new Set(mentionablePeople.map((p) => p.handle)),
+    [mentionablePeople],
   );
   const mentionMatches = useMemo<Person[]>(() => {
     if (!mention) return [];
     const query = mention.query.toLowerCase();
-    return participantIds
-      .map((id) => people[id])
-      .filter((person): person is Person => Boolean(person))
-      .filter(
-        (person) =>
-          person.name.toLowerCase().includes(query) ||
-          person.handle.toLowerCase().includes(query),
-      );
-  }, [mention, participantIds, people]);
+    return mentionablePeople.filter(
+      (person) =>
+        person.name.toLowerCase().includes(query) ||
+        person.handle.toLowerCase().includes(query),
+    );
+  }, [mention, mentionablePeople]);
 
   // Move the caret after a mention insertion once the DOM has the new value
   // — setSelectionRange against the pre-update value is a no-op.

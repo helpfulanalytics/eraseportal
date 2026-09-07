@@ -114,7 +114,7 @@ import {
   sendTaskAssignedWhatsapp,
   sendTaskCompletedWhatsapp,
 } from "@/lib/whatsapp/templates";
-import { canManageOrganizations } from "@/lib/permissions";
+import { canManageOrganizations, isActive } from "@/lib/permissions";
 
 /** Every mutation needs an identity; none of them accept one as input. */
 async function requireUser() {
@@ -248,15 +248,26 @@ export async function sendMessageAction(
   // is not.
   if (!trimmed && files.length === 0) return;
 
-  // Only current participants are mentionable — scoping the handle map to
-  // them (rather than the whole org) is what keeps `@someone-not-here` as
-  // literal text instead of a real mention.
+  // Mentionable: this conversation's actual participants, plus every active
+  // agency member — a member works across every project (`getVisiblePeople`
+  // already gives them that same everywhere-visibility), so they should be
+  // taggable everywhere too, not only in threads whose `participantIds`
+  // happened to include them. `createConversationAction` only ever seeds
+  // `[creator]`, so without this a second member can never be mentioned in
+  // a conversation they didn't start. Clients stay scoped to actual
+  // participants — the whole reason this isn't just "everyone in the org".
   const people = await getPeople();
-  const handleToId = Object.fromEntries(
-    conversation.participantIds
+  const activeMemberIds = Object.values(people)
+    .filter((p) => p.kind === "member" && isActive(p))
+    .map((p) => p.id);
+  const mentionable = new Map(
+    [...conversation.participantIds, ...activeMemberIds]
       .map((id) => people[id])
       .filter((person): person is NonNullable<typeof person> => Boolean(person))
-      .map((person) => [person.handle, person.id]),
+      .map((person) => [person.id, person] as const),
+  );
+  const handleToId = Object.fromEntries(
+    [...mentionable.values()].map((person) => [person.handle, person.id]),
   );
 
   // A reply target has to be a real message in *this* conversation — dropped
@@ -291,7 +302,21 @@ export async function sendMessageAction(
       ? `${SITE_URL}/w/${organization.slug}/conversations/${conversation.id}`
       : SITE_URL;
 
-    const recipients = conversation.participantIds.filter((id) => id !== me.id);
+    // Everyone already in the thread notifies on every message, same as
+    // before — that volume question is separate from this fix. On top of
+    // that, anyone actually @mentioned gets notified even if they aren't a
+    // stored participant, since `handleToId` above now resolves any active
+    // member's handle regardless — otherwise mentioning a member who never
+    // sent a message in this thread would tag them with no notification at
+    // all, which defeats the point of tagging them.
+    const mentionedIds = new Set(
+      [...trimmed.matchAll(/@([a-zA-Z0-9_]+)/g)]
+        .map((match) => handleToId[match[1]])
+        .filter((id): id is string => Boolean(id)),
+    );
+    const recipients = [
+      ...new Set([...conversation.participantIds, ...mentionedIds]),
+    ].filter((id) => id !== me.id);
     await Promise.all(
       recipients.map(async (id) => {
         try {

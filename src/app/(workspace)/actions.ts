@@ -37,6 +37,7 @@ import {
   deleteFolderFile,
   deleteMessage,
   deleteOrganization,
+  deleteOrganizationCascade,
   editMessage,
   getBoard,
   getConversation,
@@ -938,6 +939,29 @@ export async function setOrganizationDefaultClientAccessAction(
 export async function deleteOrganizationAction(organizationId: string): Promise<void> {
   await requireOrgAdmin();
   await deleteOrganization(organizationId);
+  revalidatePath("/");
+}
+
+/**
+ * The cascading delete behind `DeleteProjectDialog` — removes the project
+ * and everything inside it (folders, boards, conversations, documents,
+ * embeds, files, clients) in one action, no "empty it first" required.
+ * `confirmName` has to match the project's actual name exactly; that typed
+ * confirmation is the only thing standing between this and
+ * `deleteOrganizationCascade`, so it's checked here rather than trusted from
+ * the client.
+ */
+export async function deleteOrganizationCascadeAction(
+  organizationId: string,
+  confirmName: string,
+): Promise<void> {
+  await requireOrgAdmin();
+  const organization = await getOrganization(organizationId);
+  if (!organization) throw new Error("That project no longer exists.");
+  if (confirmName.trim() !== organization.name) {
+    throw new Error("That doesn't match the project's name.");
+  }
+  await deleteOrganizationCascade(organizationId);
   revalidatePath("/");
 }
 

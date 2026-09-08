@@ -22,7 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 import {
-  deleteOrganizationAction,
+  deleteOrganizationCascadeAction,
   renameOrganizationAction,
 } from "@/app/(workspace)/actions";
 import {
@@ -31,6 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DeleteProjectDialog } from "@/components/kitchen/delete-project-dialog";
 import { UnreadBadge } from "@/components/kitchen/unread-badge";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +73,7 @@ export function ProjectCard({
   const router = useRouter();
   const [displayTitle, setDisplayTitle] = useState(title);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const rename = () => {
@@ -93,25 +95,11 @@ export function ProjectCard({
     });
   };
 
-  const remove = () => {
+  const confirmDelete = async () => {
     if (!orgId) return;
-    if (
-      !window.confirm(
-        `Delete "${displayTitle}"? This can't be undone.`,
-      )
-    )
-      return;
-
-    startTransition(async () => {
-      try {
-        await deleteOrganizationAction(orgId);
-        onDeleted?.();
-      } catch (cause) {
-        window.alert(
-          cause instanceof Error ? cause.message : "Couldn't delete the project.",
-        );
-      }
-    });
+    await deleteOrganizationCascadeAction(orgId, displayTitle);
+    setDeleteOpen(false);
+    onDeleted?.();
   };
 
   return (
@@ -177,11 +165,22 @@ export function ProjectCard({
               Edit
             </DropdownMenuItem>
             <DropdownMenuItem onClick={rename}>Rename</DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={remove}>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : null}
+
+      {deleteOpen ? (
+        <DeleteProjectDialog
+          projectName={displayTitle}
+          onConfirm={confirmDelete}
+          onClose={() => setDeleteOpen(false)}
+        />
       ) : null}
     </motion.div>
   );

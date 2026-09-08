@@ -1166,6 +1166,81 @@ export async function deleteFolder(folderId: string): Promise<void> {
 }
 
 /**
+ * The "yes, actually delete everything inside it" version of `deleteFolder`
+ * — recurses into subfolders first, deletes every item via its own kind's
+ * delete function (so each one's own cleanup — a conversation's messages, a
+ * file's Storage object — still runs), then the folder itself. Used only by
+ * `deleteOrganizationCascade` below, behind the typed-name confirmation in
+ * `delete-project-dialog.tsx`; nothing else should call this without that
+ * same weight of confirmation in front of it.
+ */
+async function deleteFolderCascade(folderId: string): Promise<void> {
+  const folder = await getFolder(folderId);
+  if (!folder) return;
+
+  // Siblings and sibling items don't depend on each other — only the order
+  // relative to *this* folder's own delete (children and items first, then
+  // the folder) matters. Sequential awaits here were most of why a project
+  // with any real content took several seconds to delete.
+  const children = folder.organizationId
+    ? await getFolders({ organizationId: folder.organizationId, parentFolderId: folderId })
+    : (await getFolders()).filter((f) => f.parentFolderId === folderId);
+  await Promise.all(children.map((child) => deleteFolderCascade(child.id)));
+
+  const items = await getFolderItems(folderId);
+  await Promise.all(
+    items.map((item) => {
+      switch (item.kind) {
+        case "board":
+          return deleteBoard(item.id);
+        case "conversation":
+          return deleteConversation(item.id);
+        case "document":
+          return deleteDocument(item.id);
+        case "embed":
+          return deleteEmbed(item.id);
+        case "file":
+          return deleteFolderFile(item.id);
+      }
+    }),
+  );
+
+  await adminDb().collection(COLLECTIONS.folders).doc(folderId).delete();
+}
+
+/**
+ * The "yes, actually delete everything" version of `deleteOrganization` —
+ * recursively deletes every folder (via `deleteFolderCascade`) and hard-
+ * deletes every client Person record (unlike removing a member, a client
+ * has nowhere else to belong once its one organization is gone, so there's
+ * no equivalent to `deactivateMember`'s soft delete here), then the
+ * organization itself. No guard, no going back — `deleteOrganizationCascadeAction`
+ * requiring the project's exact name typed out is what makes this safe to
+ * expose in the UI at all.
+ */
+export async function deleteOrganizationCascade(organizationId: string): Promise<void> {
+  const [folders, clients] = await Promise.all([
+    getFolders({ organizationId }),
+    getClients(),
+  ]);
+
+  // Only top-level folders — deleteFolderCascade recurses into subfolders
+  // itself, so a subfolder in this same flat list would otherwise get
+  // deleted twice (harmlessly, but it's needless extra work). Independent
+  // of each other, so run in parallel — same reasoning as inside
+  // deleteFolderCascade.
+  const topLevelFolders = folders.filter((f) => !f.parentFolderId);
+  const orgClients = clients.filter((c) => c.organizationId === organizationId);
+  const db = adminDb();
+  await Promise.all([
+    ...topLevelFolders.map((folder) => deleteFolderCascade(folder.id)),
+    ...orgClients.map((client) => db.collection(COLLECTIONS.people).doc(client.id).delete()),
+  ]);
+
+  await db.collection(COLLECTIONS.organizations).doc(organizationId).delete();
+}
+
+/**
  * The folder's own description. Written by the Create Folder dialog since the
  * beginning and rendered by nothing until the header's description toggle
  * started showing it.

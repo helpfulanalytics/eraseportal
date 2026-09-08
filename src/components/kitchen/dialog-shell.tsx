@@ -40,6 +40,7 @@ export function DialogShell({
   error,
   leftAction,
   hideSubmit,
+  destructive,
   children,
 }: {
   title: string;
@@ -64,6 +65,8 @@ export function DialogShell({
    * do. `leftAction` (Delete) still renders.
    */
   hideSubmit?: boolean;
+  /** Reds out the submit button — for a dialog whose action is itself the destructive one (e.g. confirming a delete), not just a form next to a separate Delete button. */
+  destructive?: boolean;
   children: React.ReactNode;
 }) {
   useEffect(() => {
@@ -125,7 +128,10 @@ export function DialogShell({
                 type="button"
                 disabled={!canSubmit || pending}
                 onClick={onSubmit}
-                className="flex h-8 items-center rounded-lg bg-k-blue px-4 font-medium text-k-white text-md transition-opacity hover:opacity-90 disabled:opacity-40"
+                className={cn(
+                  "flex h-8 items-center rounded-lg px-4 font-medium text-k-white text-md transition-opacity hover:opacity-90 disabled:opacity-40",
+                  destructive ? "bg-k-red" : "bg-k-blue",
+                )}
               >
                 {pending ? "Saving…" : submitLabel}
               </button>

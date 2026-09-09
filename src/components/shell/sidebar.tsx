@@ -317,10 +317,10 @@ function CollapsibleFolder({
       if (isUnreadCleared(item.id)) return acc;
       return {
         count: acc.count + (item.unreadCount ?? 0),
-        hasMention: acc.hasMention || Boolean(item.hasMention),
+        mentionCount: acc.mentionCount + (item.mentionCount ?? 0),
       };
     },
-    { count: 0, hasMention: false },
+    { count: 0, mentionCount: 0 },
   );
   
   const [isOpen, setIsOpen] = useState(() => {
@@ -365,7 +365,7 @@ function CollapsibleFolder({
             strokeWidth={1.5}
           />
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-          <UnreadBadge count={folderUnread.count} mention={folderUnread.hasMention} />
+          <UnreadBadge count={folderUnread.count} mentionCount={folderUnread.mentionCount} />
         </Link>
       </div>
 
@@ -396,7 +396,7 @@ function CollapsibleFolder({
                       <span className="min-w-0 flex-1 truncate">{item.name}</span>
                       <UnreadBadge
                         count={isUnreadCleared(item.id) ? 0 : item.unreadCount}
-                        mention={!isUnreadCleared(item.id) && item.hasMention}
+                        mentionCount={isUnreadCleared(item.id) ? 0 : item.mentionCount}
                       />
                     </SidebarRow>
                   </SortableSidebarItem>

@@ -98,7 +98,7 @@ export default async function WorkspaceHomePage() {
             : undefined,
           orgId: org.id,
           unreadCount: unreadByOrg[org.id]?.count,
-          hasMention: unreadByOrg[org.id]?.hasMention,
+          mentionCount: unreadByOrg[org.id]?.mentionCount,
         };
       })
     : // A client only reaches this branch if they somehow have no

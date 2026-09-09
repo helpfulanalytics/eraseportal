@@ -77,7 +77,7 @@ function toRow(
     authorId: item.authorId,
     href: itemHref(item, orgSlug),
     unreadCount: unreadCounts[item.id]?.count,
-    hasMention: unreadCounts[item.id]?.hasMention,
+    mentionCount: unreadCounts[item.id]?.mentionCount,
   };
 
   if (item.meta.type === "file") {

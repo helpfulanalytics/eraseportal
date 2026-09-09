@@ -583,6 +583,8 @@ export interface InboxMessage {
   attachmentCount: number;
   /** Internal note — shown with the same marker the message list uses. */
   isNote?: boolean;
+  /** The message body @mentions the viewer. */
+  mentionsMe?: boolean;
 }
 
 /** A folder item as the Inbox's Updates tab lists it: "X added <name>". */
@@ -640,8 +642,8 @@ export interface NavFolder {
   color?: string;
   /** Rolled up from every item below, so a collapsed folder still shows it has unseen activity. */
   unreadCount?: number;
-  /** True when any unseen item's `hasMention` is true. */
-  hasMention?: boolean;
+  /** Summed from every item below's `mentionCount`. */
+  mentionCount?: number;
   items: Array<{
     id: string;
     name: string;
@@ -651,8 +653,8 @@ export interface NavFolder {
     color?: string;
     /** Unseen cards/comments (board) or messages (conversation) since the viewer's last visit. */
     unreadCount?: number;
-    /** True when an unseen conversation message mentions the viewer. Always false/absent for boards. */
-    hasMention?: boolean;
+    /** How many unseen conversation messages mention the viewer. Always 0/absent for boards. */
+    mentionCount?: number;
   }>;
   /**
    * Clients linked to this folder via `Person.folderId`. A separate array

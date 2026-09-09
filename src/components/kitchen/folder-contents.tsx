@@ -91,8 +91,8 @@ export interface FolderRow {
   embedUrl?: string;
   /** Unseen cards/comments (board) or messages (conversation). Absent for every other kind. */
   unreadCount?: number;
-  /** True when an unseen conversation message mentions the viewer. */
-  hasMention?: boolean;
+  /** How many unseen conversation messages mention the viewer. */
+  mentionCount?: number;
 }
 
 type Age = "any" | "today" | "week" | "month";
@@ -595,7 +595,7 @@ function GridCard({
       {row.unreadCount ? (
         <UnreadBadge
           count={row.unreadCount}
-          mention={row.hasMention}
+          mentionCount={row.mentionCount}
           className="absolute top-1.5 left-1.5"
         />
       ) : null}
@@ -847,7 +847,7 @@ function SortableRowWrapper(props: any) {
             {props.row.subtitle}
           </span>
         </span>
-        <UnreadBadge count={props.row.unreadCount} mention={props.row.hasMention} className="ml-auto" />
+        <UnreadBadge count={props.row.unreadCount} mentionCount={props.row.mentionCount} className="ml-auto" />
       </RowTarget>
 
       <span className="w-[160px] shrink-0 text-k-black-56 text-md">
@@ -897,7 +897,7 @@ function ListRow(props: any) {
             {props.row.subtitle}
           </span>
         </span>
-        <UnreadBadge count={props.row.unreadCount} mention={props.row.hasMention} className="ml-auto" />
+        <UnreadBadge count={props.row.unreadCount} mentionCount={props.row.mentionCount} className="ml-auto" />
       </RowTarget>
 
       <span className="w-[160px] shrink-0 text-k-black-56 text-md">

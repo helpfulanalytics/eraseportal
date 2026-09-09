@@ -239,6 +239,8 @@ interface RowModel {
   muted?: boolean;
   /** Right-hand marker: attachment count, "Note", a due date. */
   badge?: string;
+  /** The row is a message that @mentions the viewer — takes over `badge`'s slot in red. */
+  mention?: boolean;
   strikethrough?: boolean;
 }
 
@@ -262,7 +264,11 @@ function Row({ row, pathname }: { row: RowModel; pathname: string }) {
         <span className="min-w-0 flex-1 truncate font-semibold text-k-black-84 text-md">
           {author?.name || row.title || "Someone"}
         </span>
-        {row.badge ? (
+        {row.mention ? (
+          <span className="shrink-0 rounded bg-k-red-08 px-1.5 py-px font-medium text-k-red text-sm">
+            @ mention
+          </span>
+        ) : row.badge ? (
           <span className="shrink-0 rounded bg-k-black-04 px-1.5 py-px text-k-black-56 text-sm">
             {row.badge}
           </span>
@@ -317,6 +323,7 @@ function toRows(
         date: formatShortDate(message.createdAt),
         body: message.preview || "(no text)",
         breadcrumb: `${message.folderName} / ${message.conversationName}`,
+        mention: message.mentionsMe,
         badge: message.isNote
           ? "Note"
           : message.attachmentCount > 0

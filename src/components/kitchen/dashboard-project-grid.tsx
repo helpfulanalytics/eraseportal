@@ -25,8 +25,8 @@ export interface DashboardCardItem {
   orgId?: string;
   /** Unseen board/conversation activity across everything inside this project. */
   unreadCount?: number;
-  /** True when any of that unseen activity is a mention of the viewer. */
-  hasMention?: boolean;
+  /** How much of that unseen activity is a mention of the viewer. */
+  mentionCount?: number;
 }
 
 export function DashboardProjectGrid({
@@ -153,7 +153,7 @@ export function DashboardProjectGrid({
               color={item.color}
               orgId={item.orgId}
               unreadCount={item.unreadCount}
-              hasMention={item.hasMention}
+              mentionCount={item.mentionCount}
               onDeleted={() =>
                 setItems((current) => current.filter((i) => i.id !== item.id))
               }

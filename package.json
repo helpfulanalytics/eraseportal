@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx --env-file=.env.local scripts/seed-firestore.ts",
+    "import:cardflow-real": "tsx --env-file=.env.local scripts/import-cardflow-real.ts",
     "firebase:rules": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes,storage",
     "firebase:emulators": "npx -y firebase-tools@latest emulators:start",
     "reset": "tsx --env-file=.env.local scripts/reset-firestore.ts",

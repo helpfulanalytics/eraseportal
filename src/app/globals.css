@@ -484,6 +484,27 @@
   html {
     @apply font-sans;
   }
+
+  /*
+   * Global hand-cursor rule: anything clickable should look clickable.
+   * `<a href>` gets this from the UA stylesheet already; `<button>` does
+   * not, so this is the one line standing between every button on the
+   * site and the plain arrow cursor. Covers ARIA/Radix's `role="button"`
+   * too, for divs acting as buttons (folder cards, etc). Disabled control
+   * are excluded on purpose — a disabled action shouldn't invite a click.
+   */
+  a,
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="link"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="checkbox"]:not([aria-disabled="true"]),
+  [role="radio"]:not([aria-disabled="true"]),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
 }
 
 /*

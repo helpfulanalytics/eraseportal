@@ -62,6 +62,7 @@ import {
   markConversationRead,
   markInviteUsed,
   moveCard,
+  regenerateTimesheetToken,
   removeCardAttachment,
   removeDeviceToken,
   renameBoard,
@@ -120,7 +121,7 @@ import {
   sendTaskAssignedWhatsapp,
   sendTaskCompletedWhatsapp,
 } from "@/lib/whatsapp/templates";
-import { canManageOrganizations, isActive } from "@/lib/permissions";
+import { canEditTimesheets, canManageOrganizations, isActive } from "@/lib/permissions";
 
 /** Every mutation needs an identity; none of them accept one as input. */
 async function requireUser() {
@@ -889,10 +890,10 @@ export async function createTaskAction(input: {
 }
 
 /**
- * The timesheet page's quick-log form. Member-only to write (see
- * `requireAdmin`) — a client reading the same page gets a read-only view,
- * same as any other item in a folder they can open. Runs alongside the
- * external time-tracking sheet, not in place of it.
+ * The timesheet page's quick-log form. Gated to `canEditTimesheets`, not
+ * plain `requireAdmin` — every other member (and a client reading the same
+ * page) gets a read-only view, same as any other item in a folder they can
+ * open. Runs alongside the external time-tracking sheet, not in place of it.
  */
 export async function logTimesheetEntryAction(input: {
   timesheetId: string;
@@ -900,7 +901,8 @@ export async function logTimesheetEntryAction(input: {
   notes: string;
   hours: number;
 }): Promise<string> {
-  const me = await requireAdmin();
+  const me = await requireUser();
+  if (!canEditTimesheets(me)) throw new Error("You don't have permission to log time.");
   await assertOrgAccess(me, input.folderId);
 
   const notes = input.notes.trim();
@@ -918,6 +920,24 @@ export async function logTimesheetEntryAction(input: {
 
   revalidatePath("/w/[orgSlug]/timesheets/[timesheetId]", "page");
   return entry.id;
+}
+
+/**
+ * Rotates a timesheet's `apiToken` — the old one stops working the instant
+ * this commits. Same gate as logging: only `canEditTimesheets` may see or
+ * reissue the token, since it's a live credential, not a display setting.
+ */
+export async function regenerateTimesheetTokenAction(
+  timesheetId: string,
+  folderId: string,
+): Promise<string> {
+  const me = await requireUser();
+  if (!canEditTimesheets(me)) throw new Error("You don't have permission to do that.");
+  await assertOrgAccess(me, folderId);
+
+  const token = await regenerateTimesheetToken(timesheetId);
+  revalidatePath("/w/[orgSlug]/timesheets/[timesheetId]", "page");
+  return token;
 }
 
 export async function renameWorkspaceAction(name: string): Promise<void> {

@@ -31,6 +31,17 @@ export function isActive(person: Person): boolean {
   return !person.deactivatedAt;
 }
 
+/**
+ * Logging or editing a timesheet entry, and managing its API connection
+ * (viewing the token, reconnecting). Deliberately one named person rather
+ * than a role — Tosin asked to be the only one who can touch timesheets at
+ * all, agency-wide, not "any admin." Reading a timesheet stays governed by
+ * ordinary folder access; this only gates writing to one.
+ */
+export function canEditTimesheets(me: Person): boolean {
+  return me.email === "allioluwatosin8@gmail.com";
+}
+
 /** Reaching the Team page at all, and the invite/remove actions behind it. */
 export function canManageTeam(me: Person): boolean {
   const role = memberRoleOf(me);

@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { ItemTopBar } from "@/components/kitchen/item-top-bar";
+import { TimesheetConnect } from "@/components/kitchen/timesheet-connect";
 import { TimesheetEntries } from "@/components/kitchen/timesheet-entries";
 import { TimesheetHeader } from "@/components/kitchen/timesheet-header";
 import { requireFolderAccess } from "@/lib/access-guard";
 import { getFolder, getTimesheet, getTimesheetEntries } from "@/lib/kitchen-data";
+import { canEditTimesheets } from "@/lib/permissions";
 
 export default async function TimesheetPage({
   params,
@@ -17,6 +19,7 @@ export default async function TimesheetPage({
   const folder = await getFolder(timesheet.folderId);
   const me = await requireFolderAccess(folder);
   const canManage = me.kind === "member";
+  const canEdit = canEditTimesheets(me);
 
   const entries = await getTimesheetEntries(timesheetId);
   const totalHours = entries.reduce((sum, e) => sum + e.hours, 0);
@@ -43,12 +46,24 @@ export default async function TimesheetPage({
         canManage={canManage}
       />
 
-      <TimesheetEntries
-        timesheetId={timesheet.id}
-        folderId={timesheet.folderId}
-        entries={entries}
-        canLog={canManage}
-      />
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-8">
+        {canEdit ? (
+          <TimesheetConnect
+            timesheetId={timesheet.id}
+            folderId={timesheet.folderId}
+            timesheetName={timesheet.name}
+            apiToken={timesheet.apiToken}
+            apiConnectedAt={timesheet.apiConnectedAt}
+          />
+        ) : null}
+
+        <TimesheetEntries
+          timesheetId={timesheet.id}
+          folderId={timesheet.folderId}
+          entries={entries}
+          canLog={canEdit}
+        />
+      </div>
     </div>
   );
 }

@@ -342,11 +342,6 @@ export async function getTimesheet(id: string): Promise<Timesheet | undefined> {
   return one<Timesheet>(COLLECTIONS.timesheets, id);
 }
 
-/** Every timesheet across every project — the discovery list for `/api/timesheet-entries`. */
-export async function getTimesheets(): Promise<Timesheet[]> {
-  return many<Timesheet>(collection(COLLECTIONS.timesheets));
-}
-
 /**
  * A timesheet's entries, newest first. Sorted in memory rather than via a
  * second `.orderBy` — same reasoning as `getFolders`'s organization-scoped
@@ -1751,6 +1746,7 @@ export async function createTimesheet(input: {
     folderId: input.folderId,
     authorId: input.authorId,
     createdAt: new Date().toISOString(),
+    apiToken: randomUUID(),
   };
 
   const batch = db.batch();
@@ -1775,6 +1771,29 @@ export async function renameTimesheet(timesheetId: string, name: string): Promis
   batch.update(db.collection(COLLECTIONS.timesheets).doc(timesheetId), { name });
   batch.update(db.collection(COLLECTIONS.items).doc(timesheetId), { name });
   await batch.commit();
+}
+
+/**
+ * Issues a fresh `apiToken` and clears `apiConnectedAt` — the old token
+ * stops working the instant this commits, since `/api/timesheet-entries`
+ * checks the token currently on the document, not a list of ones ever
+ * issued. Returns the new token so the caller can show it immediately
+ * without a second read.
+ */
+export async function regenerateTimesheetToken(timesheetId: string): Promise<string> {
+  const token = randomUUID();
+  await adminDb().collection(COLLECTIONS.timesheets).doc(timesheetId).update({
+    apiToken: token,
+    apiConnectedAt: FieldValue.delete(),
+  });
+  return token;
+}
+
+/** Called by `/api/timesheet-entries` on every successful POST. */
+export async function markTimesheetConnected(timesheetId: string): Promise<void> {
+  await adminDb().collection(COLLECTIONS.timesheets).doc(timesheetId).update({
+    apiConnectedAt: new Date().toISOString(),
+  });
 }
 
 export async function deleteTimesheet(timesheetId: string): Promise<void> {

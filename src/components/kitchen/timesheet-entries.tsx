@@ -88,7 +88,7 @@ export function TimesheetEntries({
   const groups = groupByDate(entries);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-8">
+    <div className="flex flex-col">
       {canLog ? (
         <div className="mb-6 flex flex-col gap-3 rounded-xl border border-k-black-08 p-4 sm:flex-row sm:items-end">
           <div className="sm:w-24">

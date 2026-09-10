@@ -320,12 +320,13 @@ export interface Task {
 
 /**
  * A folder item, like Board or Document — one per client project you want
- * to track hours against. Fully client-visible, same as any other item in a
- * folder they can open (see `requireFolderAccess`); there's no separate
- * gating on the entries themselves. Logging an entry is member-only (see
- * `logTimesheetEntryAction`) and can also happen through
- * `/api/timesheet-entries`, a shared-secret endpoint meant for scripted
- * updates. Runs alongside the external time-tracking sheet, not a
+ * to track hours against. Fully client-visible for *reading* — same as any
+ * other item in a folder they can open (see `requireFolderAccess`), no
+ * separate gating on the entries themselves. *Logging* an entry is
+ * restricted to one person (see `canEditTimesheets` in permissions.ts),
+ * either through the page's form or through `/api/timesheet-entries`, a
+ * per-timesheet-token endpoint meant for an agent's scripted updates — see
+ * `apiToken` below. Runs alongside the external time-tracking sheet, not a
  * replacement for it.
  */
 export interface Timesheet {
@@ -337,6 +338,20 @@ export interface Timesheet {
   access?: "invited" | "link";
   roles?: ResourceRoles;
   createdAt: string;
+  /**
+   * Random per-timesheet secret for `/api/timesheet-entries` — scoped to
+   * this one timesheet rather than a single app-wide secret, so a
+   * connection made in one codebase can't touch any other project's hours.
+   * Never shown to a client; only `canEditTimesheets` sees it.
+   */
+  apiToken: string;
+  /**
+   * Set the first time `apiToken` is used in a successful POST; cleared
+   * whenever the token is regenerated. Drives the "Connected" / "Not
+   * connected yet" status on the page — there's no other signal for whether
+   * an agent somewhere actually holds a working token.
+   */
+  apiConnectedAt?: string;
 }
 
 export interface TimesheetEntry {

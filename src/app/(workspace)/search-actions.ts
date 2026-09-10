@@ -21,7 +21,8 @@ export type SearchResult = {
     | "board"
     | "document"
     | "file"
-    | "embed";
+    | "embed"
+    | "timesheet";
   url?: string;
   subtitle?: string;
 };

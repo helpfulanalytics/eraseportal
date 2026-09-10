@@ -131,6 +131,14 @@ export function ItemThumb({
     );
   }
 
+  if (subject.kind === "timesheet") {
+    return (
+      <span className={frame}>
+        <TimesheetArt card={card} />
+      </span>
+    );
+  }
+
   if (subject.kind === "embed") {
     if (subject.url && card) {
       return (
@@ -226,6 +234,25 @@ function BoardArt({ card }: { card: boolean }) {
             />
           ))}
         </span>
+      ))}
+    </span>
+  );
+}
+
+/** A little bar chart — varying-length hour bars, like a ledger at a glance. */
+function TimesheetArt({ card }: { card: boolean }) {
+  const bars = [40, 70, 55, 85, 30];
+  return (
+    <span className="flex h-full w-full items-end gap-[3px] px-1.5 pb-1.5">
+      {bars.map((height, i) => (
+        <span
+          key={i}
+          style={{ height: `${height}%` }}
+          className={cn(
+            "flex-1 rounded-t-[2px]",
+            i === 3 ? "bg-k-blue" : "bg-k-blue-20",
+          )}
+        />
       ))}
     </span>
   );

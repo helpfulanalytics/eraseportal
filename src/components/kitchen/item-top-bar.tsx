@@ -19,7 +19,7 @@ export function ItemTopBar({
   participants: string[];
   shareTitle: string;
   resourceId: string;
-  resourceType: "conversation" | "folder" | "document" | "board" | "embed";
+  resourceType: "conversation" | "folder" | "document" | "board" | "embed" | "timesheet";
   initialAccess?: "invited" | "link";
   roles?: Record<string, "viewer" | "editor" | "full">;
   authorId?: string;

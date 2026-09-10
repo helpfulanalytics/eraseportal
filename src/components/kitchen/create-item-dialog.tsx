@@ -21,6 +21,7 @@ import {
   createConversationAction,
   createDocumentAction,
   createEmbedAction,
+  createTimesheetAction,
 } from "@/app/(workspace)/actions";
 import {
   DialogShell,
@@ -38,7 +39,8 @@ export type ItemType =
   | "embed"
   | "link"
   | "document"
-  | "proposal";
+  | "proposal"
+  | "timesheet";
 
 const NEEDS_FOLDER: Record<ItemType, boolean> = {
   board: true,
@@ -47,6 +49,7 @@ const NEEDS_FOLDER: Record<ItemType, boolean> = {
   link: true,
   document: true,
   proposal: true,
+  timesheet: true,
 };
 
 const NEEDS_URL: Record<ItemType, boolean> = {
@@ -56,6 +59,7 @@ const NEEDS_URL: Record<ItemType, boolean> = {
   link: true,
   document: false,
   proposal: false,
+  timesheet: false,
 };
 
 /**
@@ -175,6 +179,12 @@ export function CreateItemDialog({
             router.push(`/w/${orgSlug}/embeds/${id}`);
             break;
           }
+          case "timesheet":
+            onClose();
+            router.push(
+              `/w/${orgSlug}/timesheets/${await createTimesheetAction(dest, trimmed)}`,
+            );
+            break;
         }
       } catch (cause) {
         setError(

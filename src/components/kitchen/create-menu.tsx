@@ -23,6 +23,7 @@ import { useState } from "react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
+  ClockIcon,
   ExternalLinkIcon,
   FileTextIcon,
   FolderIcon,
@@ -62,6 +63,7 @@ const ROWS: Array<{
   { key: "link", icon: ExternalLinkIcon, label: "Link", hint: "Share external resources", inFolder: true },
   { key: "document", icon: FileTextIcon, label: "Document", hint: "Write a doc, or open a canvas board", inFolder: true },
   { key: "proposal", icon: ReceiptTextIcon, label: "Proposal or Contract", hint: "Prepare offers for clients", inFolder: true },
+  { key: "timesheet", icon: ClockIcon, label: "Timesheet", hint: "Track hours on this project", inFolder: true },
 ];
 
 /** Dialog title for a type — "Create Board", "Create Proposal or Contract". */

@@ -33,6 +33,8 @@ function itemSubtitle(meta: ItemMeta): string {
         : `Updated ${formatShortDate(meta.updatedAt)}`;
     case "embed":
       return meta.provider;
+    case "timesheet":
+      return `${meta.totalHours} hr${meta.totalHours === 1 ? "" : "s"} · ${meta.entryCount} entr${meta.entryCount === 1 ? "y" : "ies"}`;
     default:
       return "";
   }
@@ -57,7 +59,11 @@ export async function getFolderPanelItems(
     if (folder.organizationId !== me.organizationId) {
       throw new Error("You don't have access to that folder.");
     }
-    if (folder.authorId !== me.id && !folder.roles?.[me.id]) {
+    if (
+      folder.access !== "clients" &&
+      folder.authorId !== me.id &&
+      !folder.roles?.[me.id]
+    ) {
       throw new Error("You don't have access to that folder.");
     }
   }

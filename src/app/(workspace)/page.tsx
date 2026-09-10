@@ -1,4 +1,5 @@
 import {
+  ClockIcon,
   FileTextIcon,
   FolderIcon,
   LayoutTemplateIcon,
@@ -10,14 +11,12 @@ import {
   DashboardProjectGrid,
   type DashboardCardItem,
 } from "@/components/kitchen/dashboard-project-grid";
-import { TimesheetPanel } from "@/components/kitchen/timesheet-panel";
 import {
   getClients,
   getCurrentUser,
   getFolders,
   getOrganizations,
   getOrganizationsUnreadCounts,
-  getRecentTimesheetEntries,
   type UnreadInfo,
 } from "@/lib/kitchen-data";
 import { formatRelativeTime } from "@/lib/kitchen-format";
@@ -30,8 +29,8 @@ import { formatRelativeTime } from "@/lib/kitchen-format";
  * friends — which 404'd the moment the workspace was reset. A card that
  * creates is both the intent and the only version that can't go stale.
  *
- * Folder/Board/Embed/Document are admin-only (see `requireAdmin` in
- * actions.ts) — a client sees only the Conversation card, matching what
+ * Folder/Board/Embed/Document/Timesheet are admin-only (see `requireAdmin`
+ * in actions.ts) — a client sees only the Conversation card, matching what
  * they're actually allowed to create.
  */
 const ADMIN_CREATE_ACTIONS: Array<{
@@ -45,6 +44,7 @@ const ADMIN_CREATE_ACTIONS: Array<{
   { icon: MessageSquareIcon, label: "Conversation", hint: "Discuss anything", creates: "conversation" },
   { icon: LinkIcon, label: "Embed", hint: "Add third-party apps", creates: "embed" },
   { icon: FileTextIcon, label: "Document", hint: "Curate content", creates: "document" },
+  { icon: ClockIcon, label: "Timesheet", hint: "Track hours on a project", creates: "timesheet" },
 ];
 
 const CLIENT_CREATE_ACTIONS: Array<{
@@ -60,7 +60,7 @@ export default async function WorkspaceHomePage() {
   const me = await getCurrentUser();
   const isAdmin = me?.kind === "member";
 
-  const [folders, organizations, clients, unreadByOrg, timesheetEntries] = await Promise.all([
+  const [folders, organizations, clients, unreadByOrg] = await Promise.all([
     getFolders(
       isAdmin ? undefined : { organizationId: me?.organizationId },
     ),
@@ -69,7 +69,6 @@ export default async function WorkspaceHomePage() {
     isAdmin && me
       ? getOrganizationsUnreadCounts(me.id)
       : Promise.resolve<Record<string, UnreadInfo>>({}),
-    isAdmin && me ? getRecentTimesheetEntries(me.id) : Promise.resolve([]),
   ]);
 
   const createActions = isAdmin ? ADMIN_CREATE_ACTIONS : CLIENT_CREATE_ACTIONS;
@@ -120,15 +119,6 @@ export default async function WorkspaceHomePage() {
           ? "Every client engagement you're running, in one place."
           : "Your workspace — jump into a folder to see what's going on."}
       </p>
-
-      {isAdmin ? (
-        <div className="mt-8">
-          <TimesheetPanel
-            organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
-            entries={timesheetEntries}
-          />
-        </div>
-      ) : null}
 
       <div className="mt-8">
         <DashboardProjectGrid isAdmin={isAdmin} items={dashboardItems} />

@@ -27,6 +27,7 @@ import {
   createInvite,
   createOrganization,
   createTask,
+  createTimesheet,
   createTimesheetEntry,
   deleteConversation,
   deleteBoard,
@@ -39,6 +40,7 @@ import {
   deleteMessage,
   deleteOrganization,
   deleteOrganizationCascade,
+  deleteTimesheet,
   editMessage,
   getBoard,
   getConversation,
@@ -54,6 +56,7 @@ import {
   getPeople,
   getPerson,
   getTasks,
+  getTimesheet,
   getWorkspace,
   markBoardRead,
   markConversationRead,
@@ -69,6 +72,7 @@ import {
   renameFolder,
   renameFolderFile,
   renameOrganization,
+  renameTimesheet,
   saveDocumentContent,
   saveDocumentNodes,
   sendMessage,
@@ -692,6 +696,7 @@ const ROUTE_SEGMENT: Record<StarrableKind, string> = {
   board: "boards/[boardId]",
   document: "documents/[documentId]",
   embed: "embeds/[embedId]",
+  timesheet: "timesheets/[timesheetId]",
 };
 
 /** The folder an entity's access is judged against. */
@@ -709,7 +714,9 @@ async function folderOf(kind: StarrableKind, id: string): Promise<string> {
         ? await getBoard(id)
         : kind === "document"
           ? await getDocument(id)
-          : await getEmbed(id);
+          : kind === "timesheet"
+            ? await getTimesheet(id)
+            : await getEmbed(id);
 
   if (!owner) throw new Error("That no longer exists.");
   return owner.folderId;
@@ -882,16 +889,19 @@ export async function createTaskAction(input: {
 }
 
 /**
- * The dashboard's quick work-log form. Member-only and never client-visible
- * — this runs alongside the external time-tracking sheet, not in place of
- * it, so it deliberately does nothing beyond writing the entry.
+ * The timesheet page's quick-log form. Member-only to write (see
+ * `requireAdmin`) — a client reading the same page gets a read-only view,
+ * same as any other item in a folder they can open. Runs alongside the
+ * external time-tracking sheet, not in place of it.
  */
-export async function logTimeAction(input: {
-  organizationId?: string;
+export async function logTimesheetEntryAction(input: {
+  timesheetId: string;
+  folderId: string;
   notes: string;
   hours: number;
 }): Promise<string> {
   const me = await requireAdmin();
+  await assertOrgAccess(me, input.folderId);
 
   const notes = input.notes.trim();
   if (!notes) throw new Error("Say what you worked on.");
@@ -900,14 +910,13 @@ export async function logTimeAction(input: {
   }
 
   const entry = await createTimesheetEntry({
+    timesheetId: input.timesheetId,
     authorId: me.id,
     notes,
     hours: input.hours,
-    date: new Date().toISOString().slice(0, 10),
-    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
   });
 
-  revalidatePath("/");
+  revalidatePath("/w/[orgSlug]/timesheets/[timesheetId]", "page");
   return entry.id;
 }
 
@@ -1009,6 +1018,19 @@ export async function createBoardAction(
   const board = await createBoard({ folderId, name: trimmed, authorId: me.id });
   revalidatePath("/w/[orgSlug]", "layout");
   return board.id;
+}
+
+export async function createTimesheetAction(
+  folderId: string,
+  name: string,
+): Promise<string> {
+  const me = await requireAdmin();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A timesheet needs a name.");
+
+  const timesheet = await createTimesheet({ folderId, name: trimmed, authorId: me.id });
+  revalidatePath("/w/[orgSlug]", "layout");
+  return timesheet.id;
 }
 
 export async function createDocumentAction(
@@ -1581,6 +1603,34 @@ export async function renameBoardAction(
 export async function deleteBoardAction(boardId: string, _folderId: string): Promise<void> {
   await requireAdmin();
   await deleteBoard(boardId);
+  revalidatePath("/w/[orgSlug]/folders/[folderId]", "page");
+  revalidatePath("/w/[orgSlug]", "layout");
+}
+
+/* ---- timesheets ------------------------------------------------------ */
+
+export async function renameTimesheetAction(
+  timesheetId: string,
+  _folderId: string,
+  name: string,
+): Promise<void> {
+  await requireAdmin();
+
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A timesheet needs a name.");
+
+  await renameTimesheet(timesheetId, trimmed);
+  revalidatePath("/w/[orgSlug]/timesheets/[timesheetId]", "page");
+  revalidatePath("/w/[orgSlug]/folders/[folderId]", "page");
+  revalidatePath("/w/[orgSlug]", "layout");
+}
+
+export async function deleteTimesheetAction(
+  timesheetId: string,
+  _folderId: string,
+): Promise<void> {
+  await requireAdmin();
+  await deleteTimesheet(timesheetId);
   revalidatePath("/w/[orgSlug]/folders/[folderId]", "page");
   revalidatePath("/w/[orgSlug]", "layout");
 }

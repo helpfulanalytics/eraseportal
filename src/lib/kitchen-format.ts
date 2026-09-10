@@ -58,6 +58,8 @@ export function itemHref(item: FolderItem, orgSlug: string): string | undefined 
       return `/w/${orgSlug}/documents/${item.id}`;
     case "embed":
       return `/w/${orgSlug}/embeds/${item.id}`;
+    case "timesheet":
+      return `/w/${orgSlug}/timesheets/${item.id}`;
     default:
       return undefined;
   }

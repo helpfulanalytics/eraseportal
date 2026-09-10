@@ -16,7 +16,8 @@ export type ItemKind =
   | "board"
   | "document"
   | "embed"
-  | "file";
+  | "file"
+  | "timesheet";
 
 export interface Workspace {
   id: string;
@@ -207,6 +208,8 @@ export type ItemMeta =
       preview?: string;
     }
   | { type: "embed"; provider: string }
+  /** Denormalised so the folder listing shows "12.5 hrs · 8 entries" without reading every entry. */
+  | { type: "timesheet"; entryCount: number; totalHours: number }
   | { type: "plain" };
 
 export interface FolderItem {
@@ -316,15 +319,30 @@ export interface Task {
 }
 
 /**
- * A quick work-log entry, logged from the dashboard as work happens.
- * Member-only (see `logTimeAction`) — clients never see or create these.
- * Runs alongside the external time-tracking sheet, not a replacement for it.
+ * A folder item, like Board or Document — one per client project you want
+ * to track hours against. Fully client-visible, same as any other item in a
+ * folder they can open (see `requireFolderAccess`); there's no separate
+ * gating on the entries themselves. Logging an entry is member-only (see
+ * `logTimesheetEntryAction`) and can also happen through
+ * `/api/timesheet-entries`, a shared-secret endpoint meant for scripted
+ * updates. Runs alongside the external time-tracking sheet, not a
+ * replacement for it.
  */
+export interface Timesheet {
+  id: string;
+  name: string;
+  folderId: string;
+  authorId?: string;
+  starred?: boolean;
+  access?: "invited" | "link";
+  roles?: ResourceRoles;
+  createdAt: string;
+}
+
 export interface TimesheetEntry {
   id: string;
+  timesheetId: string;
   authorId: string;
-  /** Absent = general/internal work not tied to one client project. */
-  organizationId?: string;
   notes: string;
   hours: number;
   /** The work date, `YYYY-MM-DD` — defaults to the day it was logged. */

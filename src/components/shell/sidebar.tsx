@@ -7,6 +7,7 @@ import {
   CircleCheckIcon,
   ChevronRightIcon,
   ChevronsUpDownIcon,
+  ClockIcon,
   ExternalLinkIcon,
   FileIcon,
   FileTextIcon,
@@ -101,6 +102,8 @@ function hrefFor(item: NavItem, orgSlug: string, folderHref: string): string {
       return `/w/${orgSlug}/documents/${item.id}`;
     case "embed":
       return `/w/${orgSlug}/embeds/${item.id}`;
+    case "timesheet":
+      return `/w/${orgSlug}/timesheets/${item.id}`;
     case "file":
       return folderHref;
   }
@@ -132,6 +135,8 @@ function iconFor(item: NavItem) {
       return item.meta.type === "file" && item.meta.mime?.startsWith("image/")
         ? ImageIcon
         : FileIcon;
+    case "timesheet":
+      return ClockIcon;
   }
 }
 

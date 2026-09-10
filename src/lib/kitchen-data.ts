@@ -54,6 +54,7 @@ import type {
   Reaction,
   Task,
   Template,
+  Timesheet,
   TimesheetEntry,
   Workspace,
 } from "./kitchen-types";
@@ -73,6 +74,7 @@ const COLLECTIONS = {
   tasks: "tasks",
   inbox: "inbox",
   invites: "invites",
+  timesheets: "timesheets",
   timesheetEntries: "timesheetEntries",
 } as const;
 
@@ -336,22 +338,27 @@ export async function getTasks(): Promise<Task[]> {
   return many<Task>(collection(COLLECTIONS.tasks));
 }
 
+export async function getTimesheet(id: string): Promise<Timesheet | undefined> {
+  return one<Timesheet>(COLLECTIONS.timesheets, id);
+}
+
+/** Every timesheet across every project — the discovery list for `/api/timesheet-entries`. */
+export async function getTimesheets(): Promise<Timesheet[]> {
+  return many<Timesheet>(collection(COLLECTIONS.timesheets));
+}
+
 /**
- * An author's most recent work-log entries, newest first. Sorted in memory
- * rather than via a second `.orderBy` — same reasoning as `getFolders`'s
- * organization-scoped query above: an equality filter plus an order-by on a
- * different field needs a composite index, and this avoids requiring one
- * just for a dashboard widget.
+ * A timesheet's entries, newest first. Sorted in memory rather than via a
+ * second `.orderBy` — same reasoning as `getFolders`'s organization-scoped
+ * query above: an equality filter plus an order-by on a different field
+ * needs a composite index, and a timesheet's entry count never justifies one.
  */
-export async function getRecentTimesheetEntries(
-  authorId: string,
-  limit = 20,
-): Promise<TimesheetEntry[]> {
+export async function getTimesheetEntries(timesheetId: string): Promise<TimesheetEntry[]> {
   const entries = await many<TimesheetEntry>(
-    collection(COLLECTIONS.timesheetEntries).where("authorId", "==", authorId),
+    collection(COLLECTIONS.timesheetEntries).where("timesheetId", "==", timesheetId),
   );
   entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return entries.slice(0, limit);
+  return entries;
 }
 
 export async function getInbox(): Promise<InboxEntry[]> {
@@ -1630,6 +1637,7 @@ export const STARRABLE = {
   board: COLLECTIONS.boards,
   document: COLLECTIONS.documents,
   embed: COLLECTIONS.embeds,
+  timesheet: COLLECTIONS.timesheets,
 } as const;
 
 export type StarrableKind = keyof typeof STARRABLE;
@@ -1673,26 +1681,118 @@ export async function createTask(input: {
   return task;
 }
 
+/**
+ * Appends one entry to a timesheet. Same shape as `sendMessage`: the entry
+ * itself, an incremented summary on the timesheet's `items` row (so the
+ * folder listing can show "12.5 hrs · 8 entries" without reading every
+ * entry), and the parent folder's `updatedAt` bumped in the same batch.
+ *
+ * Callers include `logTimesheetEntryAction` (the UI) and
+ * `/api/timesheet-entries` (the shared-secret endpoint) — both funnel
+ * through here so the summary can never drift from the real entries.
+ */
 export async function createTimesheetEntry(input: {
+  timesheetId: string;
   authorId: string;
-  organizationId?: string;
   notes: string;
   hours: number;
-  date: string;
+  /** `YYYY-MM-DD`. Defaults to today. */
+  date?: string;
 }): Promise<TimesheetEntry> {
-  const doc = adminDb().collection(COLLECTIONS.timesheetEntries).doc();
+  const timesheet = await getTimesheet(input.timesheetId);
+  if (!timesheet) throw new Error("That timesheet no longer exists.");
+
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.timesheetEntries).doc();
   const entry: TimesheetEntry = {
     id: doc.id,
+    timesheetId: input.timesheetId,
     authorId: input.authorId,
     notes: input.notes,
     hours: input.hours,
-    date: input.date,
+    date: input.date ?? new Date().toISOString().slice(0, 10),
     createdAt: new Date().toISOString(),
-    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
   };
 
-  await doc.set(withoutId(entry));
+  const batch = db.batch();
+  batch.set(doc, withoutId(entry));
+  batch.set(
+    db.collection(COLLECTIONS.items).doc(input.timesheetId),
+    {
+      meta: {
+        type: "timesheet",
+        entryCount: FieldValue.increment(1),
+        totalHours: FieldValue.increment(input.hours),
+      },
+    },
+    { merge: true },
+  );
+  batch.set(
+    db.collection(COLLECTIONS.folders).doc(timesheet.folderId),
+    { updatedAt: new Date().toISOString() },
+    { merge: true },
+  );
+  await batch.commit();
+
   return entry;
+}
+
+export async function createTimesheet(input: {
+  folderId: string;
+  name: string;
+  authorId: string;
+}): Promise<Timesheet> {
+  const db = adminDb();
+  const doc = db.collection(COLLECTIONS.timesheets).doc();
+
+  const timesheet: Timesheet = {
+    id: doc.id,
+    name: input.name,
+    folderId: input.folderId,
+    authorId: input.authorId,
+    createdAt: new Date().toISOString(),
+  };
+
+  const batch = db.batch();
+  batch.set(doc, withoutId(timesheet));
+  linkItemIntoFolder(batch, {
+    id: doc.id,
+    kind: "timesheet",
+    name: input.name,
+    folderId: input.folderId,
+    authorId: input.authorId,
+    meta: { type: "timesheet", entryCount: 0, totalHours: 0 },
+  });
+  await batch.commit();
+
+  return timesheet;
+}
+
+/** Same two-copy-of-the-name situation as `renameBoard` — see its comment. */
+export async function renameTimesheet(timesheetId: string, name: string): Promise<void> {
+  const db = adminDb();
+  const batch = db.batch();
+  batch.update(db.collection(COLLECTIONS.timesheets).doc(timesheetId), { name });
+  batch.update(db.collection(COLLECTIONS.items).doc(timesheetId), { name });
+  await batch.commit();
+}
+
+export async function deleteTimesheet(timesheetId: string): Promise<void> {
+  const timesheet = await getTimesheet(timesheetId);
+  if (!timesheet) return;
+
+  const db = adminDb();
+  const entries = await many<TimesheetEntry>(
+    collection(COLLECTIONS.timesheetEntries).where("timesheetId", "==", timesheetId),
+  );
+
+  const batch = db.batch();
+  batch.delete(db.collection(COLLECTIONS.timesheets).doc(timesheetId));
+  for (const entry of entries) {
+    batch.delete(db.collection(COLLECTIONS.timesheetEntries).doc(entry.id));
+  }
+  unlinkItemFromFolder(batch, { id: timesheetId, folderId: timesheet.folderId });
+  await batch.commit();
 }
 
 export async function setTaskCompleted(

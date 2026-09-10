@@ -199,7 +199,11 @@ export async function getOrganizationBySlug(slug: string): Promise<Organization 
 function filterByFolderAccess(folders: Folder[], me: Person | null): Folder[] {
   if (!me) return [];
   if (me.kind === "member") return folders;
-  return folders.filter((folder) => folder.authorId === me.id || folder.roles?.[me.id]);
+  return folders.filter(
+    (folder) =>
+      folder.organizationId === me.organizationId &&
+      (folder.access === "clients" || folder.authorId === me.id || Boolean(folder.roles?.[me.id])),
+  );
 }
 
 /* ---- collections ----------------------------------------------------- */

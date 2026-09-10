@@ -137,7 +137,13 @@ export interface Folder {
   description?: string;
   starred: boolean;
   itemIds: string[];
-  /** Absent on folders seeded before the dialog existed. */
+  /**
+   * Absent on folders seeded before the dialog existed — treat as `"private"`.
+   * `"clients"` is what actually opens a folder to every client in
+   * `organizationId`, no per-person invite needed (see `filterByFolderAccess`
+   * / `requireFolderAccess`). `"private"`/`"internal"` clients never see
+   * regardless of org match, unless individually granted a role below.
+   */
   access?: FolderAccess;
   /** Only meaningful when `access` is `internal`. */
   internalRole?: "viewer" | "editor";
@@ -146,8 +152,9 @@ export interface Folder {
   /**
    * The organization (client business) this folder belongs to, if any.
    * Absent means agency-internal — no client can ever see it, regardless of
-   * `access`. This is the actual, enforced access boundary; `access`/
-   * `internalRole` above are still unenforced (see their doc comments).
+   * `access`. This is the necessary boundary; `access` (and, for a specific
+   * person, `roles` below) decide whether a client inside that org actually
+   * sees this particular folder.
    */
   organizationId?: string;
   /**

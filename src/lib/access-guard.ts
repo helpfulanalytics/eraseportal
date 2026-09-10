@@ -23,8 +23,11 @@ import type { Folder, Organization, Person, ResourceRoles } from "./kitchen-type
 
 /**
  * 404s unless the signed-in person is a member (sees everything) or a client
- * whose `organizationId` matches the folder's. Returns the current person so
- * callers that also need it don't have to fetch it twice.
+ * whose `organizationId` matches the folder's AND who can actually see this
+ * particular folder — `access: "clients"`, or an individual grant (authored
+ * it, or holds a `roles` entry) for a `"private"`/`"internal"` one. Returns
+ * the current person so callers that also need it don't have to fetch it
+ * twice.
  *
  * Takes `Folder | undefined` rather than requiring the caller to narrow
  * first — `notFound()` throws (return type `never`), but TypeScript can't
@@ -42,7 +45,13 @@ export async function requireFolderAccess(folder: Folder | undefined): Promise<P
 
   if (me.kind === "client") {
     if (folder.organizationId !== me.organizationId) notFound();
-    if (folder.authorId !== me.id && !folder.roles?.[me.id]) notFound();
+    if (
+      folder.access !== "clients" &&
+      folder.authorId !== me.id &&
+      !folder.roles?.[me.id]
+    ) {
+      notFound();
+    }
   }
   
   return me;

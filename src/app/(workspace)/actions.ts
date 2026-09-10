@@ -29,6 +29,7 @@ import {
   createTask,
   createTimesheet,
   createTimesheetEntry,
+  deactivateMember,
   deleteConversation,
   deleteBoard,
   deleteBoardColumn,
@@ -62,6 +63,7 @@ import {
   markConversationRead,
   markInviteUsed,
   moveCard,
+  reactivateMember,
   regenerateTimesheetToken,
   removeCardAttachment,
   removeDeviceToken,
@@ -104,7 +106,7 @@ import type {
   Person,
   Reaction,
 } from "@/lib/kitchen-types";
-import { adminMessaging } from "@/lib/firebase/admin";
+import { adminAuth, adminMessaging } from "@/lib/firebase/admin";
 import { SITE_URL } from "@/lib/email/resend";
 import {
   sendCardAddedEmail,
@@ -121,7 +123,7 @@ import {
   sendTaskAssignedWhatsapp,
   sendTaskCompletedWhatsapp,
 } from "@/lib/whatsapp/templates";
-import { canEditTimesheets, canManageOrganizations, isActive } from "@/lib/permissions";
+import { canEditTimesheets, canManageOrganizations, canRemoveClient, isActive } from "@/lib/permissions";
 
 /** Every mutation needs an identity; none of them accept one as input. */
 async function requireUser() {
@@ -1263,6 +1265,48 @@ export async function resendInviteAction(personId: string): Promise<void> {
       invitedByName: me.name,
     });
   }
+}
+
+/**
+ * Removing a client, same shape as `removeMemberAction` for a member: a
+ * soft delete (`deactivatedAt`), plus revoking their Firebase refresh
+ * tokens so an already-issued session cookie stops verifying on their next
+ * request rather than lingering for up to 14 days. Their message history
+ * and file authorship stay exactly as they are — nothing here touches the
+ * folder, conversation, or any item they ever touched.
+ */
+export async function removeClientAction(personId: string): Promise<void> {
+  const me = await requireAdmin();
+  const target = await getPerson(personId);
+  if (!target) throw new Error("That person doesn't exist.");
+  if (!canRemoveClient(me, target)) {
+    throw new Error("You don't have permission to remove that client.");
+  }
+
+  await deactivateMember(personId);
+
+  if (target.uid) {
+    try {
+      await adminAuth().revokeRefreshTokens(target.uid);
+    } catch (cause) {
+      console.error("Couldn't revoke sessions for removed client:", cause);
+    }
+  }
+
+  revalidatePath("/w/[orgSlug]/settings", "page");
+}
+
+/** Undoes a removal. The client keeps whatever folder access they had before. */
+export async function restoreClientAction(personId: string): Promise<void> {
+  const me = await requireAdmin();
+  const target = await getPerson(personId);
+  if (!target) throw new Error("That person doesn't exist.");
+  if (!canRemoveClient(me, target)) {
+    throw new Error("You don't have permission to restore that client.");
+  }
+
+  await reactivateMember(personId);
+  revalidatePath("/w/[orgSlug]/settings", "page");
 }
 
 /**

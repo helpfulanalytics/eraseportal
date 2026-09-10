@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 import { PageTitleTabs, SubTabs } from "@/components/kitchen/page-title";
-import { PersonAvatar } from "@/components/kitchen/person-avatar";
+import { ClientRow } from "@/components/kitchen/client-row";
 import { OrgNameField } from "@/components/kitchen/org-name-field";
 import { DefaultClientAccessField } from "@/components/kitchen/default-client-access-field";
 import { PortalLinkField } from "@/components/kitchen/portal-link-field";
 import { NewOrgClientButton } from "@/components/kitchen/admin-dialog-buttons";
-import { ResendInviteButton } from "@/components/kitchen/resend-invite-button";
 import { requireOrgWorkspaceAccess } from "@/lib/access-guard";
 import { getClients } from "@/lib/kitchen-data";
-import type { ClientAccessLevel } from "@/lib/kitchen-types";
+import type { ClientAccessLevel, Person } from "@/lib/kitchen-types";
 
 const TABS = ["general", "clients", "billing"] as const;
 type Tab = (typeof TABS)[number];
@@ -70,7 +69,7 @@ export default async function SettingsPage({
             defaultClientAccess={organization.defaultClientAccess ?? "view"}
           />
         ) : null}
-        {active === "clients" ? <Clients organizationId={organization.id} /> : null}
+        {active === "clients" ? <Clients organizationId={organization.id} me={me} /> : null}
         {active === "billing" ? <Billing /> : null}
       </div>
     </div>
@@ -111,7 +110,7 @@ function General({
   );
 }
 
-async function Clients({ organizationId }: { organizationId: string }) {
+async function Clients({ organizationId, me }: { organizationId: string; me: Person }) {
   const clients = (await getClients()).filter((c) => c.organizationId === organizationId);
 
   return (
@@ -128,29 +127,7 @@ async function Clients({ organizationId }: { organizationId: string }) {
             No clients yet. Add one to send them an invite.
           </li>
         ) : (
-          clients.map((person) => (
-            <li
-              key={person.id}
-              className="flex items-center gap-3 border-k-black-06 border-b py-3"
-            >
-              <PersonAvatar personId={person.id} className="size-8" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-k-black-84 text-md">
-                  {person.name}
-                </div>
-                <div className="truncate text-k-black-40 text-md">
-                  {person.email}
-                </div>
-              </div>
-              {person.uid ? (
-                <span className="shrink-0 rounded bg-k-green-23 px-2 py-0.5 text-k-green-0e text-sm">
-                  Active
-                </span>
-              ) : (
-                <ResendInviteButton personId={person.id} />
-              )}
-            </li>
-          ))
+          clients.map((person) => <ClientRow key={person.id} me={me} person={person} />)
         )}
       </ul>
     </div>

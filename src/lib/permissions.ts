@@ -89,6 +89,15 @@ export function canRemoveMember(me: Person, target: Person): boolean {
   return memberRoleOf(target) !== "owner";
 }
 
+/**
+ * Whether `me` may deactivate a client. Same team-management gate as
+ * removing a member — there's no per-client owner tier to protect, so this
+ * is simpler than `canRemoveMember`.
+ */
+export function canRemoveClient(me: Person, target: Person): boolean {
+  return canManageTeam(me) && target.kind === "client";
+}
+
 /** Only an owner hands the seat on, and only to another active member. */
 export function canTransferOwnership(me: Person, target: Person): boolean {
   return (

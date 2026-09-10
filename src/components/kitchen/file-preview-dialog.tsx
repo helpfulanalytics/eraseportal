@@ -16,6 +16,20 @@ import { useEffect } from "react";
 import { DownloadIcon, ExternalLinkIcon, XIcon } from "lucide-react";
 import { formatBytes } from "@/lib/kitchen-format";
 
+/**
+ * Word, Excel and PowerPoint — old and new extensions alike. A browser has
+ * no native renderer for any of these, unlike a PDF or an image, so they
+ * route through Microsoft's Office viewer below instead of an inline embed.
+ */
+function isOfficeMime(mime: string): boolean {
+  return (
+    mime === "application/msword" ||
+    mime === "application/vnd.ms-excel" ||
+    mime === "application/vnd.ms-powerpoint" ||
+    mime.startsWith("application/vnd.openxmlformats-officedocument.")
+  );
+}
+
 export interface PreviewFile {
   name: string;
   label: string;
@@ -48,7 +62,9 @@ export function FilePreviewDialog({
         ? "audio"
         : mime.startsWith("video/")
           ? "video"
-          : "other";
+          : isOfficeMime(mime)
+            ? "office"
+            : "other";
 
   return (
     <div
@@ -138,6 +154,15 @@ export function FilePreviewDialog({
             <video src={file.url} controls className="max-h-[70vh] w-full bg-k-black">
               <track kind="captions" />
             </video>
+          ) : kind === "office" ? (
+            // Microsoft's viewer fetches the file itself, so it needs a URL
+            // *it* can reach — works once this is deployed to a real domain,
+            // not against a localhost download URL during local dev.
+            <iframe
+              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.url)}`}
+              title={file.name}
+              className="h-[70vh] w-full border-0"
+            />
           ) : (
             <Message>
               There&apos;s no preview for {file.label} files — open or download

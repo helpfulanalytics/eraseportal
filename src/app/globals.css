@@ -508,6 +508,32 @@
 }
 
 /*
+ * Global press feedback: a clickable thing should give a little under the
+ * click, not just change color. `src/components/ui/button.tsx` already does
+ * this for the shared Button component (`[data-slot="button"]`) via its own
+ * base-ui `data-pressed` handling — this is the safety net for every
+ * hand-rolled `<button>`/`role="button"` outside that component (several
+ * older screens still build their own), scoped off with
+ * `:not([data-slot="button"])` so the two rules never fight.
+ *
+ * Deliberately unlayered (not `@layer base`): Tailwind's own transition-*
+ * utilities live in `@layer utilities`, which always wins over `@layer base`
+ * regardless of selector specificity — a base-layer rule here silently lost
+ * to any element's own `transition-opacity` etc. Unlayered CSS beats every
+ * `@layer` origin, which is what actually makes this take effect everywhere.
+ */
+button:not([data-slot="button"]):not(:disabled),
+[role="button"]:not([data-slot="button"]):not([aria-disabled="true"]) {
+  transition: transform 100ms ease-out;
+}
+@media (prefers-reduced-motion: no-preference) {
+  button:not([data-slot="button"]):not(:disabled):active,
+  [role="button"]:not([data-slot="button"]):not([aria-disabled="true"]):active {
+    transform: scale(0.97);
+  }
+}
+
+/*
  * Block-editor placeholders.
  *
  * A `contenteditable` can't take a `placeholder` attribute, and React can't

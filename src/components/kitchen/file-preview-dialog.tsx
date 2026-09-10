@@ -155,11 +155,17 @@ export function FilePreviewDialog({
               <track kind="captions" />
             </video>
           ) : kind === "office" ? (
-            // Microsoft's viewer fetches the file itself, so it needs a URL
-            // *it* can reach — works once this is deployed to a real domain,
-            // not against a localhost download URL during local dev.
+            // Tried Microsoft's viewer (view.officeapps.live.com) first — it
+            // fetches the file server-side, so it needs a URL *it* can reach,
+            // which rules out localhost during local dev. But it also
+            // returned "File not found" against a real, publicly-reachable
+            // Firebase Storage download URL (verified: same URL 200s via
+            // plain curl with the right content-type), so something about
+            // that URL shape trips it up specifically. Google's viewer
+            // renders the identical URL correctly, so it replaces Microsoft's
+            // here rather than debugging further.
             <iframe
-              src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.url)}`}
+              src={`https://docs.google.com/viewer?url=${encodeURIComponent(file.url)}&embedded=true`}
               title={file.name}
               className="h-[70vh] w-full border-0"
             />

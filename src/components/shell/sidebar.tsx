@@ -88,9 +88,10 @@ type NavItem = NavFolder["items"][number];
  * `FolderItem` just to reuse one switch statement.
  *
  * A file has no page of its own — same as everywhere else it appears in the
- * app — so its row links to the folder it's in, `folderHref`, rather than
- * inventing a destination that doesn't exist. Clicking it lands you next to
- * it in the folder's own list, where the real preview dialog lives.
+ * app — so its row links to the folder it's in, `folderHref`, with
+ * `?open=<id>` telling `FolderContents` which row to preview. That's what
+ * makes this click open the same dialog a row click in the folder itself
+ * would, instead of just landing on the folder with nothing happening.
  */
 function hrefFor(item: NavItem, orgSlug: string, folderHref: string): string {
   switch (item.kind) {
@@ -105,7 +106,7 @@ function hrefFor(item: NavItem, orgSlug: string, folderHref: string): string {
     case "timesheet":
       return `/w/${orgSlug}/timesheets/${item.id}`;
     case "file":
-      return folderHref;
+      return `${folderHref}?open=${item.id}`;
   }
 }
 

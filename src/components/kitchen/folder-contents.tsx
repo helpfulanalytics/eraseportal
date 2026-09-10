@@ -17,7 +17,7 @@
  */
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -118,6 +118,7 @@ export function FolderContents({
   toolbarRight: React.ReactNode;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const people = usePeople();
   const { uploadFiles, status: uploadStatus, error: uploadError } = useFolderUpload(folderId);
   const [dragDepth, setDragDepth] = useState(0);
@@ -175,6 +176,23 @@ export function FolderContents({
   };
 
   const [preview, setPreview] = useState<PreviewFile | null>(null);
+
+  // A file has no page of its own, so the sidebar links to its folder with
+  // `?open=<itemId>` instead — this is the other end of that link, opening
+  // the same dialog a row click would. Runs once per navigation: `router`
+  // strips the param immediately after reading it, so re-opening the same
+  // file again re-sends the same `?open=` and lands here again.
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (!openId) return;
+    const row = rows.find((r) => r.id === openId);
+    if (row?.file) setPreview(row.file);
+    router.replace(`?${new URLSearchParams(
+      Array.from(searchParams.entries()).filter(([key]) => key !== "open"),
+    ).toString()}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const [busyId, setBusyId] = useState<string | null>(null);
   /** The row currently showing an editable name field instead of static text. */
   const [renamingId, setRenamingId] = useState<string | null>(null);

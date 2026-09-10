@@ -9,6 +9,7 @@ import { FolderBoard } from "@/components/kitchen/folder-board";
 import { requireOrgWorkspaceAccess } from "@/lib/access-guard";
 import { getClients, getFolders } from "@/lib/kitchen-data";
 import { formatRelativeTime } from "@/lib/kitchen-format";
+import { isActive } from "@/lib/permissions";
 
 /**
  * An org's workspace home. Admins get the management view (folder list,
@@ -51,8 +52,11 @@ export default async function OrgWorkspaceHomePage({
     );
   }
 
+  // Removed clients keep their history but drop off this at-a-glance roster
+  // — same call the Team page makes for members. Settings' Clients tab is
+  // where a removed client is still visible (and restorable).
   const clients = (await getClients()).filter(
-    (c) => c.organizationId === organization.id,
+    (c) => c.organizationId === organization.id && isActive(c),
   );
 
   const folderItems: DashboardCardItem[] = folders.map((folder) => ({

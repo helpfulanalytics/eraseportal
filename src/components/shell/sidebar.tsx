@@ -331,8 +331,10 @@ function CollapsibleFolder({
   
   const [isOpen, setIsOpen] = useState(() => {
     if (pathname === href) return true;
-    if (folder.items.some((item) => pathname === hrefFor(item, orgSlug, href))) return true;
-    return true; // Default open
+    if (folder.items.some((item) => pathname === hrefFor(item, orgSlug, href).split("?")[0])) {
+      return true;
+    }
+    return false;
   });
 
   return (

@@ -27,6 +27,7 @@ import {
   createInvite,
   createOrganization,
   createTask,
+  createTimesheetEntry,
   deleteConversation,
   deleteBoard,
   deleteBoardColumn,
@@ -878,6 +879,36 @@ export async function createTaskAction(input: {
   revalidatePath("/w/[orgSlug]/tasks", "page");
   revalidatePath("/w/[orgSlug]/tasks/me", "page");
   return task.id;
+}
+
+/**
+ * The dashboard's quick work-log form. Member-only and never client-visible
+ * — this runs alongside the external time-tracking sheet, not in place of
+ * it, so it deliberately does nothing beyond writing the entry.
+ */
+export async function logTimeAction(input: {
+  organizationId?: string;
+  notes: string;
+  hours: number;
+}): Promise<string> {
+  const me = await requireAdmin();
+
+  const notes = input.notes.trim();
+  if (!notes) throw new Error("Say what you worked on.");
+  if (!Number.isFinite(input.hours) || input.hours <= 0) {
+    throw new Error("Hours needs to be a positive number.");
+  }
+
+  const entry = await createTimesheetEntry({
+    authorId: me.id,
+    notes,
+    hours: input.hours,
+    date: new Date().toISOString().slice(0, 10),
+    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+  });
+
+  revalidatePath("/");
+  return entry.id;
 }
 
 export async function renameWorkspaceAction(name: string): Promise<void> {

@@ -10,12 +10,14 @@ import {
   DashboardProjectGrid,
   type DashboardCardItem,
 } from "@/components/kitchen/dashboard-project-grid";
+import { TimesheetPanel } from "@/components/kitchen/timesheet-panel";
 import {
   getClients,
   getCurrentUser,
   getFolders,
   getOrganizations,
   getOrganizationsUnreadCounts,
+  getRecentTimesheetEntries,
   type UnreadInfo,
 } from "@/lib/kitchen-data";
 import { formatRelativeTime } from "@/lib/kitchen-format";
@@ -58,7 +60,7 @@ export default async function WorkspaceHomePage() {
   const me = await getCurrentUser();
   const isAdmin = me?.kind === "member";
 
-  const [folders, organizations, clients, unreadByOrg] = await Promise.all([
+  const [folders, organizations, clients, unreadByOrg, timesheetEntries] = await Promise.all([
     getFolders(
       isAdmin ? undefined : { organizationId: me?.organizationId },
     ),
@@ -67,6 +69,7 @@ export default async function WorkspaceHomePage() {
     isAdmin && me
       ? getOrganizationsUnreadCounts(me.id)
       : Promise.resolve<Record<string, UnreadInfo>>({}),
+    isAdmin && me ? getRecentTimesheetEntries(me.id) : Promise.resolve([]),
   ]);
 
   const createActions = isAdmin ? ADMIN_CREATE_ACTIONS : CLIENT_CREATE_ACTIONS;
@@ -117,6 +120,15 @@ export default async function WorkspaceHomePage() {
           ? "Every client engagement you're running, in one place."
           : "Your workspace — jump into a folder to see what's going on."}
       </p>
+
+      {isAdmin ? (
+        <div className="mt-8">
+          <TimesheetPanel
+            organizations={organizations.map((o) => ({ id: o.id, name: o.name }))}
+            entries={timesheetEntries}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-8">
         <DashboardProjectGrid isAdmin={isAdmin} items={dashboardItems} />

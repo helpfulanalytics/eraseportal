@@ -54,6 +54,7 @@ import type {
   Reaction,
   Task,
   Template,
+  TimesheetEntry,
   Workspace,
 } from "./kitchen-types";
 
@@ -72,6 +73,7 @@ const COLLECTIONS = {
   tasks: "tasks",
   inbox: "inbox",
   invites: "invites",
+  timesheetEntries: "timesheetEntries",
 } as const;
 
 /** The single workspace this deployment serves. Matches WORKSPACE in the seed. */
@@ -332,6 +334,24 @@ export async function getTemplates(): Promise<Template[]> {
 
 export async function getTasks(): Promise<Task[]> {
   return many<Task>(collection(COLLECTIONS.tasks));
+}
+
+/**
+ * An author's most recent work-log entries, newest first. Sorted in memory
+ * rather than via a second `.orderBy` — same reasoning as `getFolders`'s
+ * organization-scoped query above: an equality filter plus an order-by on a
+ * different field needs a composite index, and this avoids requiring one
+ * just for a dashboard widget.
+ */
+export async function getRecentTimesheetEntries(
+  authorId: string,
+  limit = 20,
+): Promise<TimesheetEntry[]> {
+  const entries = await many<TimesheetEntry>(
+    collection(COLLECTIONS.timesheetEntries).where("authorId", "==", authorId),
+  );
+  entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return entries.slice(0, limit);
 }
 
 export async function getInbox(): Promise<InboxEntry[]> {
@@ -1651,6 +1671,28 @@ export async function createTask(input: {
 
   await doc.set(withoutId(task));
   return task;
+}
+
+export async function createTimesheetEntry(input: {
+  authorId: string;
+  organizationId?: string;
+  notes: string;
+  hours: number;
+  date: string;
+}): Promise<TimesheetEntry> {
+  const doc = adminDb().collection(COLLECTIONS.timesheetEntries).doc();
+  const entry: TimesheetEntry = {
+    id: doc.id,
+    authorId: input.authorId,
+    notes: input.notes,
+    hours: input.hours,
+    date: input.date,
+    createdAt: new Date().toISOString(),
+    ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+  };
+
+  await doc.set(withoutId(entry));
+  return entry;
 }
 
 export async function setTaskCompleted(

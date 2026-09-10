@@ -315,6 +315,23 @@ export interface Task {
   authorId?: string;
 }
 
+/**
+ * A quick work-log entry, logged from the dashboard as work happens.
+ * Member-only (see `logTimeAction`) — clients never see or create these.
+ * Runs alongside the external time-tracking sheet, not a replacement for it.
+ */
+export interface TimesheetEntry {
+  id: string;
+  authorId: string;
+  /** Absent = general/internal work not tied to one client project. */
+  organizationId?: string;
+  notes: string;
+  hours: number;
+  /** The work date, `YYYY-MM-DD` — defaults to the day it was logged. */
+  date: string;
+  createdAt: string;
+}
+
 /* ---- board / document / embed --------------------------------------- */
 
 /**
